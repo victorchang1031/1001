@@ -1,4 +1,5 @@
 import datetime
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Form, Depends
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -12,18 +13,20 @@ from app.seed_data import seed_albums
 from app.scheduler import start_scheduler
 from app import daily
 
-app = FastAPI()
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
-templates = Jinja2Templates(directory="app/templates")
 
-
-@app.on_event("startup")
-def on_startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     init_db()
     with SessionLocal() as db:
         seed_albums(db)
         initialize_queue(db)
     start_scheduler()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+templates = Jinja2Templates(directory="app/templates")
 
 
 @app.get("/")
@@ -35,13 +38,13 @@ def home(request: Request, db: Session = Depends(get_db)):
     if gate is None:
         pick = daily.get_or_create_today_pick(db, today, now)
     return templates.TemplateResponse(
-        "index.html", {"request": request, "gate": gate, "pick": pick}
+        request, "index.html", {"gate": gate, "pick": pick}
     )
 
 
 @app.post("/gate")
 def gate(pick_id: int = Form(...), listened: str = Form(...), db: Session = Depends(get_db)):
-    pick = db.query(DailyPick).get(pick_id)
+    pick = db.get(DailyPick, pick_id)
     if pick:
         daily.answer_gate(db, pick, listened == "yes")
     return RedirectResponse("/", status_code=303)
@@ -54,7 +57,7 @@ def comment(
     rating: str = Form(""),
     db: Session = Depends(get_db),
 ):
-    pick = db.query(DailyPick).get(pick_id)
+    pick = db.get(DailyPick, pick_id)
     if pick:
         daily.add_comment(db, pick, content, int(rating) if rating else None)
     return RedirectResponse("/", status_code=303)
@@ -64,7 +67,7 @@ def comment(
 def history(request: Request, db: Session = Depends(get_db)):
     picks = db.query(DailyPick).order_by(DailyPick.date.desc()).all()
     return templates.TemplateResponse(
-        "history.html", {"request": request, "picks": picks}
+        request, "history.html", {"picks": picks}
     )
 
 
@@ -104,9 +107,9 @@ def albums(
     genres = sorted({a.genre for a in all_albums if a.genre})
     letters = sorted({a.artist[0].upper() for a in all_albums if a.artist})
     return templates.TemplateResponse(
+        request,
         "albums.html",
         {
-            "request": request,
             "albums": result,
             "decades": decades,
             "genres": genres,
