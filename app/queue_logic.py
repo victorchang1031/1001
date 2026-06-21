@@ -1,5 +1,4 @@
 import random
-from sqlalchemy import select, func
 from app.models import Album, QueueEntry
 from app.config import settings
 
