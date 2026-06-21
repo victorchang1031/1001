@@ -19,6 +19,12 @@ def peek_next(db) -> Album | None:
     return entry.album if entry else None
 
 
+def _compact(db) -> None:
+    for pos, e in enumerate(db.query(QueueEntry).order_by(QueueEntry.position).all()):
+        e.position = pos
+    db.commit()
+
+
 def pop_next(db) -> Album | None:
     entry = db.query(QueueEntry).order_by(QueueEntry.position).first()
     if entry is None:
@@ -26,20 +32,17 @@ def pop_next(db) -> Album | None:
     album = entry.album
     db.delete(entry)
     db.commit()
+    _compact(db)
     return album
 
 
 def reinsert_random(db, album_id: int) -> None:
     entries = db.query(QueueEntry).order_by(QueueEntry.position).all()
     n = len(entries)
-    # 在 0..n（含尾端前一格）中選插入點；排除最末尾以符合「插中間」
     insert_at = random.randint(0, max(0, n - 1))
     for e in entries:
         if e.position >= insert_at:
             e.position += 1
     db.add(QueueEntry(album_id=album_id, position=insert_at))
     db.commit()
-    # 重新壓實 position 為連續整數
-    for pos, e in enumerate(db.query(QueueEntry).order_by(QueueEntry.position).all()):
-        e.position = pos
-    db.commit()
+    _compact(db)
