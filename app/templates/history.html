@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>歷史</h1>
+{% for pick in picks %}
+  <section>
+    <h2>{{ pick.date }} — {{ pick.album.artist }} — {{ pick.album.title }}</h2>
+    <p>狀態：
+      {% if pick.status == "listened" %}已聽
+      {% elif pick.status == "skipped" %}沒聽
+      {% else %}待回答{% endif %}
+    </p>
+    <ul>
+      {% for c in pick.comments %}
+        <li>{% if c.rating %}{{ "★" * c.rating }}{% endif %} {{ c.content }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+{% else %}
+  <p>還沒有任何紀錄。</p>
+{% endfor %}
+{% endblock %}

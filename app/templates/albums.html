@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>所有專輯</h1>
+<form method="get" action="/albums">
+  <label>年代
+    <select name="decade" onchange="this.form.submit()">
+      <option value="">全部</option>
+      {% for d in decades %}<option value="{{ d }}" {% if d|string == selected.decade %}selected{% endif %}>{{ d }}s</option>{% endfor %}
+    </select>
+  </label>
+  <label>類型
+    <select name="genre" onchange="this.form.submit()">
+      <option value="">全部</option>
+      {% for g in genres %}<option value="{{ g }}" {% if g == selected.genre %}selected{% endif %}>{{ g }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>狀態
+    <select name="status" onchange="this.form.submit()">
+      <option value="">全部</option>
+      <option value="listened" {% if selected.status == "listened" %}selected{% endif %}>已聽</option>
+      <option value="skipped" {% if selected.status == "skipped" %}selected{% endif %}>沒聽</option>
+      <option value="unseen" {% if selected.status == "unseen" %}selected{% endif %}>尚未推薦</option>
+    </select>
+  </label>
+  <label>首字母
+    <select name="letter" onchange="this.form.submit()">
+      <option value="">全部</option>
+      {% for l in letters %}<option value="{{ l }}" {% if l == selected.letter %}selected{% endif %}>{{ l }}</option>{% endfor %}
+    </select>
+  </label>
+</form>
+<ul>
+  {% for a in albums %}
+    <li>{{ a.artist }} — {{ a.title }}（{{ a.year }}{% if a.genre %} · {{ a.genre }}{% endif %}）</li>
+  {% else %}
+    <li>沒有符合條件的專輯。</li>
+  {% endfor %}
+</ul>
+{% endblock %}

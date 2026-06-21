@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+{% if gate %}
+  <h1>先回顧昨天</h1>
+  <p>{{ gate.album.artist }} — {{ gate.album.title }}（{{ gate.album.year }}）</p>
+  <p>前一天有聽嗎？</p>
+  <form method="post" action="/gate">
+    <input type="hidden" name="pick_id" value="{{ gate.id }}">
+    <button name="listened" value="yes">有聽</button>
+    <button name="listened" value="no">沒聽</button>
+  </form>
+{% elif pick %}
+  <h1>今日專輯</h1>
+  <h2>{{ pick.album.artist }} — {{ pick.album.title }}</h2>
+  <p>{{ pick.album.year }}{% if pick.album.genre %} · {{ pick.album.genre }}{% endif %}</p>
+  <p>
+    {% if pick.album.spotify_url %}
+      <a href="{{ pick.album.spotify_url }}" target="_blank">Spotify</a>
+    {% else %}
+      <a href="https://open.spotify.com/search/{{ pick.album.title | urlencode }}%20{{ pick.album.artist | urlencode }}" target="_blank">Spotify 搜尋</a>
+    {% endif %}
+    | <a href="{{ pick.album.apple_music_url }}" target="_blank">Apple Music</a>
+  </p>
+  <h3>評論</h3>
+  <form method="post" action="/comment">
+    <input type="hidden" name="pick_id" value="{{ pick.id }}">
+    <textarea name="content" required></textarea>
+    <label>星等：
+      <select name="rating">
+        <option value="">—</option>
+        {% for n in [1,2,3,4,5] %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
+      </select>
+    </label>
+    <button type="submit">送出</button>
+  </form>
+  <ul>
+    {% for c in pick.comments %}
+      <li>{% if c.rating %}{{ "★" * c.rating }}{% endif %} {{ c.content }}</li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <h1>今天的專輯 08:00 揭曉</h1>
+  <p>敬請期待。</p>
+{% endif %}
+{% endblock %}
