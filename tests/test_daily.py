@@ -26,13 +26,13 @@ def test_before_reveal_returns_none():
         assert daily.get_or_create_today_pick(s, now.date(), now) is None
 
 
-def test_create_today_pick_and_apple_link():
+def test_create_today_pick_and_wikipedia_link():
     with SessionLocal() as s:
         now = datetime.datetime(2026, 6, 21, 8, 30)
         pick = daily.get_or_create_today_pick(s, now.date(), now)
         assert pick is not None
         assert pick.status == "pending"
-        assert pick.album.apple_music_url.startswith("https://music.apple.com/search")
+        assert pick.album.wikipedia_url.startswith("https://en.wikipedia.org/w/index.php?search=")
 
 
 def test_gate_blocks_new_pick_until_answered():

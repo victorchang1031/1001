@@ -17,8 +17,8 @@
   <label>狀態
     <select name="status" onchange="this.form.submit()">
       <option value="">全部</option>
-      <option value="listened" {% if selected.status == "listened" %}selected{% endif %}>已聽</option>
-      <option value="skipped" {% if selected.status == "skipped" %}selected{% endif %}>沒聽</option>
+      <option value="listened" {% if selected.status == "listened" %}selected{% endif %}>已收聽</option>
+      <option value="skipped" {% if selected.status == "skipped" %}selected{% endif %}>尚未收聽</option>
       <option value="unseen" {% if selected.status == "unseen" %}selected{% endif %}>尚未推薦</option>
     </select>
   </label>
@@ -28,10 +28,20 @@
       {% for l in letters %}<option value="{{ l }}" {% if l == selected.letter %}selected{% endif %}>{{ l }}</option>{% endfor %}
     </select>
   </label>
+  <label>搜尋
+    <input type="search" name="q" value="{{ selected.q }}" placeholder="專輯或歌手">
+  </label>
+  <button type="submit">套用</button>
 </form>
-<ul>
+<ul class="grid">
   {% for a in albums %}
-    <li>{{ a.artist }} — {{ a.title }}（{{ a.year }}{% if a.genre %} · {{ a.genre }}{% endif %}）</li>
+    <li class="card">
+      <a href="/albums/{{ a.id }}">
+        {% if a.cover_image_url %}<img class="thumb" src="{{ a.cover_image_url }}" alt="" onerror="this.remove()">{% endif %}
+        <strong>{{ a.title }}</strong>
+        <div class="meta">{{ a.artist }} · {{ a.year }}{% if a.genre %} · {{ a.genre }}{% endif %}</div>
+      </a>
+    </li>
   {% else %}
     <li>沒有符合條件的專輯。</li>
   {% endfor %}

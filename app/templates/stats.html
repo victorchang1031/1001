@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>統計</h1>
+<ul>
+  <li>專輯總數：{{ total_albums }}</li>
+  <li>已收聽：{{ listened }}</li>
+  <li>尚未收聽：{{ skipped }}</li>
+  <li>尚未推薦：{{ unseen }}</li>
+  <li>平均評分：{% if avg_rating %}{{ "%.1f"|format(avg_rating) }}{% else %}—{% endif %}</li>
+</ul>
+<h3>最愛榜</h3>
+<ul>
+  {% for album, avg_rating in top_albums %}
+    <li><a href="/albums/{{ album.id }}">{{ album.artist }} — {{ album.title }}</a>（{{ "%.1f"|format(avg_rating) }}★）</li>
+  {% else %}
+    <li>還沒有評分紀錄。</li>
+  {% endfor %}
+</ul>
+{% endblock %}

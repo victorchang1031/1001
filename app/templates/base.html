@@ -3,15 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>每日一張專輯</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <title>1001張死前該聽的專輯</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/style.css?v={{ css_version() }}">
 </head>
 <body>
-  <nav>
-    <a href="/">今日</a>
-    <a href="/history">歷史</a>
-    <a href="/albums">所有專輯</a>
-  </nav>
+  <details id="nav-menu">
+    <summary>選單</summary>
+    <nav>
+      <a href="/">今日</a>
+      <a href="/draw">抽籤</a>
+      <a href="/history">歷史</a>
+      <a href="/albums">所有專輯</a>
+      <a href="/stats">統計</a>
+    </nav>
+  </details>
   <main>
     {% block content %}{% endblock %}
   </main>

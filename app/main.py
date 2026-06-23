@@ -1,16 +1,21 @@
 import datetime
+import os
+import random
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, Form, Depends
+from fastapi import FastAPI, Request, Form, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import init_db, get_db, SessionLocal
-from app.models import Album, DailyPick
+from app.models import Album, DailyPick, DrawHistory, Comment
 from app.queue_logic import initialize_queue
 from app.seed_data import seed_albums
 from app.scheduler import start_scheduler
+from app.spotify import ensure_spotify_url
+from app.music_links import wikipedia_url
 from app import daily
 
 
@@ -27,6 +32,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
+templates.env.globals["css_version"] = lambda: int(os.path.getmtime("app/static/style.css"))
 
 
 @app.get("/")
@@ -43,10 +49,18 @@ def home(request: Request, db: Session = Depends(get_db)):
 
 
 @app.post("/gate")
-def gate(pick_id: int = Form(...), listened: str = Form(...), db: Session = Depends(get_db)):
+def gate(
+    pick_id: int = Form(...),
+    listened: str = Form(...),
+    content: str = Form(""),
+    rating: str = Form(""),
+    db: Session = Depends(get_db),
+):
     pick = db.get(DailyPick, pick_id)
     if pick:
         daily.answer_gate(db, pick, listened == "yes")
+        if listened == "yes" and content:
+            daily.add_comment(db, pick, content, int(rating) if rating else None)
     return RedirectResponse("/", status_code=303)
 
 
@@ -71,6 +85,26 @@ def history(request: Request, db: Session = Depends(get_db)):
     )
 
 
+@app.get("/draw")
+def draw(request: Request, db: Session = Depends(get_db)):
+    album = random.choice(db.query(Album).all())
+    ensure_spotify_url(db, album)
+    if not album.wikipedia_url:
+        album.wikipedia_url = wikipedia_url(album.title, album.artist)
+    db.add(DrawHistory(album_id=album.id, drawn_at=datetime.datetime.now()))
+    db.commit()
+    keep_ids = db.query(DrawHistory.id).order_by(DrawHistory.drawn_at.desc(), DrawHistory.id.desc()).limit(25)
+    db.query(DrawHistory).filter(DrawHistory.id.notin_(keep_ids)).delete(synchronize_session=False)
+    db.commit()
+    return templates.TemplateResponse(request, "draw.html", {"album": album})
+
+
+@app.get("/draw/history")
+def draw_history(request: Request, db: Session = Depends(get_db)):
+    records = db.query(DrawHistory).order_by(DrawHistory.drawn_at.desc()).all()
+    return templates.TemplateResponse(request, "draw_history.html", {"records": records})
+
+
 @app.get("/albums")
 def albums(
     request: Request,
@@ -78,6 +112,7 @@ def albums(
     genre: str = "",
     status: str = "",
     letter: str = "",
+    q: str = "",
     db: Session = Depends(get_db),
 ):
     query = db.query(Album)
@@ -88,6 +123,10 @@ def albums(
         query = query.filter(Album.genre == genre)
     if letter:
         query = query.filter(Album.artist.ilike(f"{letter}%"))
+    if q:
+        query = query.filter(
+            Album.title.ilike(f"%{q}%") | Album.artist.ilike(f"%{q}%")
+        )
     result = query.order_by(Album.artist).all()
 
     if status:
@@ -114,6 +153,54 @@ def albums(
             "decades": decades,
             "genres": genres,
             "letters": letters,
-            "selected": {"decade": decade, "genre": genre, "status": status, "letter": letter},
+            "selected": {"decade": decade, "genre": genre, "status": status, "letter": letter, "q": q},
+        },
+    )
+
+
+@app.get("/albums/{album_id}")
+def album_detail(request: Request, album_id: int, db: Session = Depends(get_db)):
+    album = db.get(Album, album_id)
+    if album is None:
+        raise HTTPException(status_code=404, detail="Album not found")
+    picks = (
+        db.query(DailyPick)
+        .filter(DailyPick.album_id == album_id)
+        .order_by(DailyPick.date.desc())
+        .all()
+    )
+    return templates.TemplateResponse(
+        request, "album_detail.html", {"album": album, "picks": picks}
+    )
+
+
+@app.get("/stats")
+def stats(request: Request, db: Session = Depends(get_db)):
+    total_albums = db.query(Album).count()
+    listened = db.query(DailyPick).filter(DailyPick.status == "listened").count()
+    skipped = db.query(DailyPick).filter(DailyPick.status == "skipped").count()
+    seen_album_ids = {row[0] for row in db.query(DailyPick.album_id).distinct()}
+    unseen = total_albums - len(seen_album_ids)
+    avg_rating = db.query(func.avg(Comment.rating)).filter(Comment.rating.isnot(None)).scalar()
+    top_albums = (
+        db.query(Album, func.avg(Comment.rating).label("avg_rating"))
+        .join(DailyPick, DailyPick.album_id == Album.id)
+        .join(Comment, Comment.daily_pick_id == DailyPick.id)
+        .filter(Comment.rating.isnot(None))
+        .group_by(Album.id)
+        .order_by(func.avg(Comment.rating).desc())
+        .limit(5)
+        .all()
+    )
+    return templates.TemplateResponse(
+        request,
+        "stats.html",
+        {
+            "total_albums": total_albums,
+            "listened": listened,
+            "skipped": skipped,
+            "unseen": unseen,
+            "avg_rating": avg_rating,
+            "top_albums": top_albums,
         },
     )

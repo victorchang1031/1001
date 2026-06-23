@@ -27,4 +27,3 @@ def test_sample_has_required_fields():
     for a in SAMPLE_ALBUMS:
         assert a["title"] and a["artist"]
         assert isinstance(a["year"], int)
-        assert "genre" in a

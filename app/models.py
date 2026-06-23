@@ -12,7 +12,8 @@ class Album(Base):
     year: Mapped[int] = mapped_column(Integer)
     genre: Mapped[str | None] = mapped_column(String, nullable=True)
     spotify_url: Mapped[str | None] = mapped_column(String, nullable=True)
-    apple_music_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    wikipedia_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    cover_image_url: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class QueueEntry(Base):
@@ -34,6 +35,14 @@ class DailyPick(Base):
     comments: Mapped[list["Comment"]] = relationship(
         back_populates="daily_pick", cascade="all, delete-orphan"
     )
+
+
+class DrawHistory(Base):
+    __tablename__ = "draw_history"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    album_id: Mapped[int] = mapped_column(ForeignKey("album.id"))
+    drawn_at: Mapped[datetime.datetime] = mapped_column(DateTime)
+    album: Mapped["Album"] = relationship()
 
 
 class Comment(Base):

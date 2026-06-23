@@ -1,5 +1,133 @@
-body { font-family: system-ui, sans-serif; max-width: 760px; margin: 0 auto; padding: 1rem; line-height: 1.6; }
-nav a { margin-right: 1rem; }
+:root {
+  --bg: #f3e3bd;
+  --ink: #2b1c10;
+  --card: #fff8e8;
+  --accent: #9a3324;
+  --gold: #c9962c;
+  --shadow: rgba(43, 28, 16, 0.35);
+}
+
+body {
+  font-family: "Noto Serif TC", serif;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 1rem;
+  line-height: 1.7;
+  text-align: center;
+  background-color: var(--bg);
+  background-image: radial-gradient(circle at 50% -10%, #fff6e0 0%, var(--bg) 60%);
+  color: var(--ink);
+}
+
+h1, h2, h3 {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+h1 {
+  border-bottom: 2px solid var(--ink);
+  display: inline-block;
+  padding-bottom: 0.3rem;
+  margin-bottom: 1.2rem;
+}
+
+a, a:link, a:visited, a:active, a:hover {
+  color: var(--ink);
+  text-decoration: none;
+  display: inline-block;
+  background-color: var(--card);
+  border: 1px solid var(--ink);
+  border-radius: 0.3rem;
+  padding: 0.3rem 0.8rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+a:hover {
+  box-shadow: 0.2rem 0.2rem 0 var(--shadow);
+  transform: translate(-0.1rem, -0.1rem);
+}
+
+#nav-menu { position: fixed; top: 1rem; left: 1rem; text-align: left; background: none; z-index: 10; }
+#nav-menu summary { cursor: pointer; font-size: 1.4rem; background-color: var(--card); border: 1px solid var(--ink); border-radius: 0.3rem; padding: 0.3rem 0.8rem; display: inline-block; }
+#nav-menu nav { display: flex; flex-direction: column; margin-top: 0.5rem; background: var(--card); border: 1px solid var(--ink); border-radius: 0.3rem; padding: 0.5rem; box-shadow: 0.3rem 0.3rem 0 var(--shadow); }
+nav a { margin-bottom: 0.5rem; font-size: 1.1rem; border: none; background: none; padding: 0.2rem 0.4rem; }
+nav a:hover { box-shadow: none; transform: none; text-decoration: underline; }
+
+button {
+  font-family: inherit;
+  border: 1px solid var(--ink);
+  border-radius: 0.3rem;
+  padding: 0.3rem 0.8rem;
+  background-color: var(--card);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+button:hover { box-shadow: 0.2rem 0.2rem 0 var(--shadow); transform: translate(-0.1rem, -0.1rem); }
+
 form { margin: 1rem 0; }
-textarea { display: block; width: 100%; min-height: 4rem; margin: 0.5rem 0; }
-section { border-bottom: 1px solid #ddd; padding: 0.5rem 0; }
+select { font-family: inherit; border: 1px solid var(--ink); border-radius: 0.3rem; padding: 0.2rem 0.4rem; background: var(--card); }
+textarea, input[type="search"] {
+  font-family: inherit;
+  border: 1px solid var(--ink);
+  border-radius: 0.3rem;
+  background: var(--card);
+}
+textarea { display: block; width: 28rem; height: 6rem; max-width: 100%; margin: 0.5rem auto; resize: none; padding: 0.5rem; }
+input[type="search"] { padding: 0.3rem 0.5rem; }
+
+.rating { display: flex; flex-direction: row-reverse; justify-content: center; margin: 0.5rem 0; }
+.rating input { display: none; }
+.rating label { cursor: pointer; font-size: 1.8rem; color: #d8c39a; }
+.rating label:hover,
+.rating label:hover ~ label,
+.rating input:checked ~ label { color: var(--gold); }
+
+/* vinyl sleeve effect for the big cover on home/draw pages */
+img.cover {
+  object-fit: cover;
+  border: 1px solid var(--ink);
+  box-shadow: 0.4rem 0.4rem 0 var(--shadow);
+  margin-bottom: 1rem;
+}
+
+/* card grid for albums / history */
+.grid {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 1rem;
+  padding: 0;
+  margin: 1.5rem 0;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--ink);
+  border-radius: 0.4rem;
+  box-shadow: 0.3rem 0.3rem 0 var(--shadow);
+  padding: 0.6rem;
+  text-align: left;
+  transition: transform 0.15s ease;
+}
+.card:hover { transform: translate(-0.15rem, -0.15rem); }
+
+.card a { display: block; border: none; background: none; padding: 0; }
+.card a:hover { box-shadow: none; transform: none; }
+
+.card img.thumb {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border: 1px solid var(--ink);
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.card .meta { font-size: 0.85rem; color: #5a4630; }
+
+section {
+  border-top: 1px dashed var(--ink);
+  padding: 0.8rem 0;
+  text-align: left;
+}
+section:first-of-type { border-top: none; }

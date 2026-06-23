@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>抽籤</h1>
+{% if album.cover_image_url %}<img class="cover" src="{{ album.cover_image_url }}" alt="" width="480" height="480" onerror="this.remove()">{% endif %}
+<h2>{{ album.artist }} — {{ album.title }}</h2>
+<p>{{ album.year }}{% if album.genre %} · {{ album.genre }}{% endif %}</p>
+<p>
+  {% if album.spotify_url %}
+    <a href="{{ album.spotify_url }}" target="_blank">Spotify</a>
+  {% else %}
+    <a href="https://open.spotify.com/search/{{ album.title | urlencode }}%20{{ album.artist | urlencode }}" target="_blank">Spotify</a>
+  {% endif %}
+  | <a href="{{ album.wikipedia_url }}" target="_blank">Wikipedia</a>
+</p>
+<a href="/draw">Again...</a>
+<p><a href="/draw/history">抽籤紀錄</a></p>
+{% endblock %}

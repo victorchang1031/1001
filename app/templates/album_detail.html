@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ album.artist }} — {{ album.title }}</h1>
+{% if album.cover_image_url %}<img class="cover" src="{{ album.cover_image_url }}" alt="" width="480" height="480" onerror="this.remove()">{% endif %}
+<p>{{ album.year }}{% if album.genre %} · {{ album.genre }}{% endif %}</p>
+<p>
+  {% if album.spotify_url %}
+    <a href="{{ album.spotify_url }}" target="_blank">Spotify</a>
+  {% else %}
+    <a href="https://open.spotify.com/search/{{ album.title | urlencode }}%20{{ album.artist | urlencode }}" target="_blank">Spotify</a>
+  {% endif %}
+  | <a href="{{ album.wikipedia_url }}" target="_blank">Wikipedia</a>
+</p>
+<h3>評論紀錄</h3>
+{% for pick in picks %}
+  <section>
+    <p>{{ pick.date }} ·
+      {% if pick.status == "listened" %}已收聽
+      {% elif pick.status == "skipped" %}尚未收聽
+      {% else %}待回答{% endif %}
+    </p>
+    <ul>
+      {% for c in pick.comments %}
+        <li>{% if c.rating %}{{ "★" * c.rating }}{% endif %} {{ c.content }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+{% else %}
+  <p>還沒有被推薦過。</p>
+{% endfor %}
+<p><a href="/albums">回所有專輯</a></p>
+{% endblock %}

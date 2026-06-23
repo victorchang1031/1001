@@ -2,7 +2,7 @@ import datetime
 from app.models import DailyPick, Comment
 from app.queue_logic import pop_next, reinsert_random
 from app.spotify import ensure_spotify_url
-from app.music_links import apple_music_search_url
+from app.music_links import wikipedia_url
 from app.config import settings
 
 
@@ -39,8 +39,8 @@ def get_or_create_today_pick(db, today: datetime.date, now: datetime.datetime) -
     album = pop_next(db)
     if album is None:
         return None
-    if not album.apple_music_url:
-        album.apple_music_url = apple_music_search_url(album.title, album.artist)
+    if not album.wikipedia_url:
+        album.wikipedia_url = wikipedia_url(album.title, album.artist)
     ensure_spotify_url(db, album)
     pick = DailyPick(date=today, album_id=album.id, status="pending", revealed_at=now)
     db.add(pick)

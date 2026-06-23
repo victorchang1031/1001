@@ -2,35 +2,52 @@
 {% block content %}
 {% if gate %}
   <h1>先回顧昨天</h1>
+  {% if gate.album.cover_image_url %}<img class="cover" src="{{ gate.album.cover_image_url }}" alt="" width="480" height="480" onerror="this.remove()">{% endif %}
   <p>{{ gate.album.artist }} — {{ gate.album.title }}（{{ gate.album.year }}）</p>
   <p>前一天有聽嗎？</p>
   <form method="post" action="/gate">
     <input type="hidden" name="pick_id" value="{{ gate.id }}">
-    <button name="listened" value="yes">有聽</button>
-    <button name="listened" value="no">沒聽</button>
+    <input type="hidden" name="listened" id="gate-listened" value="">
+    <div id="gate-choice">
+      <button type="button" onclick="document.getElementById('gate-listened').value='yes';document.getElementById('gate-choice').style.display='none';document.getElementById('gate-review').style.display='block';">有聽</button>
+      <button type="submit" name="listened" value="no">沒聽</button>
+    </div>
+    <div id="gate-review" style="display:none">
+      <textarea name="content"></textarea>
+      <div class="rating">
+        <input type="radio" name="rating" id="gate-rating-5" value="5"><label for="gate-rating-5">★</label>
+        <input type="radio" name="rating" id="gate-rating-4" value="4"><label for="gate-rating-4">★</label>
+        <input type="radio" name="rating" id="gate-rating-3" value="3"><label for="gate-rating-3">★</label>
+        <input type="radio" name="rating" id="gate-rating-2" value="2"><label for="gate-rating-2">★</label>
+        <input type="radio" name="rating" id="gate-rating-1" value="1"><label for="gate-rating-1">★</label>
+      </div>
+      <button type="submit">送出</button>
+    </div>
   </form>
 {% elif pick %}
   <h1>今日專輯</h1>
+  {% if pick.album.cover_image_url %}<img class="cover" src="{{ pick.album.cover_image_url }}" alt="" width="480" height="480" onerror="this.remove()">{% endif %}
   <h2>{{ pick.album.artist }} — {{ pick.album.title }}</h2>
   <p>{{ pick.album.year }}{% if pick.album.genre %} · {{ pick.album.genre }}{% endif %}</p>
   <p>
     {% if pick.album.spotify_url %}
       <a href="{{ pick.album.spotify_url }}" target="_blank">Spotify</a>
     {% else %}
-      <a href="https://open.spotify.com/search/{{ pick.album.title | urlencode }}%20{{ pick.album.artist | urlencode }}" target="_blank">Spotify 搜尋</a>
+      <a href="https://open.spotify.com/search/{{ pick.album.title | urlencode }}%20{{ pick.album.artist | urlencode }}" target="_blank">Spotify</a>
     {% endif %}
-    | <a href="{{ pick.album.apple_music_url }}" target="_blank">Apple Music</a>
+    | <a href="{{ pick.album.wikipedia_url }}" target="_blank">Wikipedia</a>
   </p>
   <h3>評論</h3>
   <form method="post" action="/comment">
     <input type="hidden" name="pick_id" value="{{ pick.id }}">
     <textarea name="content" required></textarea>
-    <label>星等：
-      <select name="rating">
-        <option value="">—</option>
-        {% for n in [1,2,3,4,5] %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
-      </select>
-    </label>
+    <div class="rating">
+      <input type="radio" name="rating" id="rating-5" value="5"><label for="rating-5">★</label>
+      <input type="radio" name="rating" id="rating-4" value="4"><label for="rating-4">★</label>
+      <input type="radio" name="rating" id="rating-3" value="3"><label for="rating-3">★</label>
+      <input type="radio" name="rating" id="rating-2" value="2"><label for="rating-2">★</label>
+      <input type="radio" name="rating" id="rating-1" value="1"><label for="rating-1">★</label>
+    </div>
     <button type="submit">送出</button>
   </form>
   <ul>

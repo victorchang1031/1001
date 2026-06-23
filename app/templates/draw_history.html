@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>抽籤紀錄</h1>
+<ul>
+  {% for r in records %}
+    <li>{{ r.drawn_at.strftime("%Y-%m-%d %H:%M") }} — {{ r.album.artist }} — {{ r.album.title }}</li>
+  {% else %}
+    <li>還沒有抽過。</li>
+  {% endfor %}
+</ul>
+{% endblock %}

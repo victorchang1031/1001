@@ -3,10 +3,11 @@
 <h1>歷史</h1>
 {% for pick in picks %}
   <section>
-    <h2>{{ pick.date }} — {{ pick.album.artist }} — {{ pick.album.title }}</h2>
+    {% if pick.album.cover_image_url %}<img class="cover" src="{{ pick.album.cover_image_url }}" alt="" width="160" height="160" style="width:8rem;height:8rem" onerror="this.remove()">{% endif %}
+    <h2><a href="/albums/{{ pick.album.id }}">{{ pick.date }} — {{ pick.album.artist }} — {{ pick.album.title }}</a></h2>
     <p>狀態：
-      {% if pick.status == "listened" %}已聽
-      {% elif pick.status == "skipped" %}沒聽
+      {% if pick.status == "listened" %}已收聽
+      {% elif pick.status == "skipped" %}尚未收聽
       {% else %}待回答{% endif %}
     </p>
     <ul>
