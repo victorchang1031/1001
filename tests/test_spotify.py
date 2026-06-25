@@ -102,6 +102,38 @@ def test_deezer_cover_url_matches_and_returns_xl():
     assert cover == "https://e-cdns/cover_xl.jpg"
 
 
+def test_clean_query_keeps_parenthetical_only_title():
+    assert spotify._clean_query_text("(Pronounced 'Leh-'Nerd 'Skin-'Nerd)") != ""
+
+
+def test_musicbrainz_cover_url_via_coverart_archive():
+    def handler(request):
+        if "musicbrainz.org" in request.url.host:
+            return httpx.Response(200, json={"releases": [{
+                "id": "mbid-1", "title": "Zombie",
+                "artist-credit": [{"name": "Fela Kuti"}],
+            }]})
+        if "coverartarchive.org" in request.url.host:
+            return httpx.Response(200)  # front-500 exists
+        return httpx.Response(404)
+
+    cover = spotify.musicbrainz_cover_url(_mock_client(handler), "Zombie", "Fela Kuti")
+    assert cover == "https://coverartarchive.org/release/mbid-1/front-500"
+
+
+def test_musicbrainz_rejects_wrong_release():
+    def handler(request):
+        if "musicbrainz.org" in request.url.host:
+            return httpx.Response(200, json={"releases": [{
+                "id": "mbid-x", "title": "Totally Other Album",
+                "artist-credit": [{"name": "Nobody"}],
+            }]})
+        return httpx.Response(200)
+
+    cover = spotify.musicbrainz_cover_url(_mock_client(handler), "Zombie", "Fela Kuti")
+    assert cover is None
+
+
 def test_backfill_fills_missing_cover(monkeypatch):
     monkeypatch.setattr(spotify.settings, "spotify_client_id", None)
     monkeypatch.setattr(spotify.settings, "spotify_client_secret", None)

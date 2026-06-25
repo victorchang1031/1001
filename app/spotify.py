@@ -13,6 +13,9 @@ SEARCH_URL = "https://api.spotify.com/v1/search"
 DISCOGS_SEARCH_URL = "https://api.discogs.com/database/search"
 ITUNES_SEARCH_URL = "https://itunes.apple.com/search"
 DEEZER_SEARCH_URL = "https://api.deezer.com/search/album"
+MUSICBRAINZ_URL = "https://musicbrainz.org/ws/2/release/"
+COVERART_URL = "https://coverartarchive.org"
+_MB_UA = "DailyAlbum/1.0 ( victorchang891031@gmail.com )"
 
 MATCH_THRESHOLD = 0.7
 
@@ -52,7 +55,9 @@ def _clean_query_text(text: str) -> str:
     # ponytail: strip "(...)" suffixes and "Artist, The" / Discogs "*" noise so
     # search strings match real release titles more often; richer fuzzy matching
     # (Levenshtein, alternate-title retry) only if this still misses a lot.
-    text = re.sub(r"\s*[\(\[][^)\]]*[\)\]]\s*$", "", text)
+    stripped = re.sub(r"\s*[\(\[][^)\]]*[\)\]]\s*$", "", text)
+    if stripped.strip():  # 別把整個括號標題（如 "(Pronounced ...)"）刪成空字串
+        text = stripped
     text = text.replace("*", "")
     text = re.sub(r"^(.+),\s*The$", r"The \1", text.strip())
     return text.split("/")[0].strip()
@@ -239,25 +244,72 @@ def _placeholder_cover_url(title: str, artist: str) -> str:
     return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
 
 
-def backfill_missing_covers(sleep: float = 0.2, client: httpx.Client | None = None) -> int:
-    # 補所有缺圖／只有 placeholder 的專輯；已有真實封面的會被 filter 排除，重啟不重抓
+def _caa_front(client: httpx.Client, kind: str, mbid: str) -> str | None:
+    url = f"{COVERART_URL}/{kind}/{mbid}/front-500"
+    r = client.get(url, headers={"User-Agent": _MB_UA}, follow_redirects=True)
+    return url if r.status_code == 200 else None
+
+
+def _musicbrainz_query(client: httpx.Client, title: str, artist: str) -> str | None:
+    resp = client.get(MUSICBRAINZ_URL, headers={"User-Agent": _MB_UA}, params={
+        "query": f'release:"{title}" AND artist:"{artist}"', "fmt": "json", "limit": 5,
+    })
+    resp.raise_for_status()
+    for rel in resp.json().get("releases", []):
+        got_artist = (rel.get("artist-credit") or [{}])[0].get("name", "")
+        if _match_score(title, artist, rel.get("title", ""), got_artist) < MATCH_THRESHOLD:
+            continue
+        # release 沒圖時退而求其次找整個 release-group 的封面
+        cover = _caa_front(client, "release", rel["id"])
+        if cover:
+            return cover
+        rg = (rel.get("release-group") or {}).get("id")
+        if rg:
+            cover = _caa_front(client, "release-group", rg)
+            if cover:
+                return cover
+    return None
+
+
+def musicbrainz_cover_url(client: httpx.Client, title: str, artist: str) -> str | None:
+    # ponytail: 權威庫、免 key，但慢且限流 1req/s，所以放最後一棒、只給前面都沒中的少數用
+    title, artist = _clean_query_text(title), _clean_query_text(artist)
+    try:
+        return _retry(lambda: _musicbrainz_query(client, title, artist))
+    except (httpx.HTTPError, ValueError):
+        return None
+
+
+def backfill_missing_covers(sleep: float = 0.2, client: httpx.Client | None = None, max_passes: int = 3) -> int:
+    # 補所有缺圖／只有 placeholder 的專輯；已有真實封面的會被 filter 排除，重啟不重抓。
+    # 多跑幾輪：首輪大量抓取常被限流而留下 placeholder，後續輪只處理剩下的少數，
+    # 不會再限流；沒進展就停（剩的是真的難匹配的）。
     from app.database import SessionLocal
     own_client = client is None
     client = client or httpx.Client(timeout=10)
     db = SessionLocal()
+    missing = Album.cover_image_url.is_(None) | Album.cover_image_url.like("data:%")
+    filled = 0
     try:
-        albums = db.query(Album).filter(
-            Album.cover_image_url.is_(None) | Album.cover_image_url.like("data:%")
-        ).all()
-        for album in albums:
-            album.spotify_url = None
-            album.cover_image_url = None
-            try:
-                ensure_spotify_url(db, album, client)
-            except Exception:
-                db.rollback()
-            time.sleep(sleep)
-        return len(albums)
+        prev_remaining = None
+        for _ in range(max_passes):
+            albums = db.query(Album).filter(missing).all()
+            if not albums:
+                break
+            for album in albums:
+                album.spotify_url = None
+                album.cover_image_url = None
+                try:
+                    ensure_spotify_url(db, album, client)
+                except Exception:
+                    db.rollback()
+                time.sleep(sleep)
+            remaining = db.query(Album).filter(missing).count()
+            filled += len(albums) - remaining
+            if remaining == prev_remaining:
+                break
+            prev_remaining = remaining
+        return filled
     finally:
         db.close()
         if own_client:
@@ -277,6 +329,7 @@ def _ensure_cover_fallback(db, album: Album, client: httpx.Client | None) -> Non
             itunes_cover_url(client, album.title, album.artist)
             or deezer_cover_url(client, album.title, album.artist)
             or discogs_cover_url(client, album.title, album.artist)
+            or musicbrainz_cover_url(client, album.title, album.artist)
         )
         album.cover_image_url = cover or _placeholder_cover_url(album.title, album.artist)
         db.commit()
