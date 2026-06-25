@@ -88,14 +88,24 @@ def spotify_status():
     spotify._token_cache.update(token=None, expires_at=0.0)
     creds = bool(settings.spotify_client_id and settings.spotify_client_secret)
     token_ok = False
+    probe = None
     if creds:
         with httpx.Client() as c:
-            token_ok = bool(spotify.get_access_token(c))
+            token = spotify.get_access_token(c)
+            token_ok = bool(token)
+            if token:
+                r = c.get(spotify.SEARCH_URL,
+                          headers={"Authorization": f"Bearer {token}"},
+                          params={"q": "Thriller artist:Michael Jackson", "type": "album", "limit": 5})
+                items = r.json().get("albums", {}).get("items", []) if r.status_code == 200 else []
+                probe = {"status": r.status_code, "items": len(items),
+                         "retry_after": r.headers.get("retry-after")}
     rid = os.getenv("SPOTIFY_CLIENT_ID")
     rsecret = os.getenv("SPOTIFY_CLIENT_SECRET")
     return {
         "creds_present": creds,
         "token_ok": token_ok,
+        "search_probe": probe,
         "env_keys_seen": [k for k in os.environ if "SPOTIFY" in k.upper()],
         "id_len": len(rid) if rid else 0,
         "secret_len": len(rsecret) if rsecret else 0,
