@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>抽籤</h1>
-{% if album.cover_image_url %}<img class="cover" src="{{ album.cover_image_url }}" alt="" width="480" height="480" onerror="this.remove()">{% endif %}
+{% if album.cover_image_url %}<img class="cover" src="{{ album.cover_image_url }}" alt="" width="360" height="360" onerror="this.remove()">{% endif %}
 <h2>{{ album.artist }} — {{ album.title }}</h2>
 <p>{{ album.year }}{% if album.genre %} · {{ album.genre }}{% endif %}</p>
 <p>

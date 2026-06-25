@@ -2,7 +2,7 @@
 {% block content %}
 {% if gate %}
   <h1>先回顧昨天</h1>
-  {% if gate.album.cover_image_url %}<img class="cover" src="{{ gate.album.cover_image_url }}" alt="" width="480" height="480" onerror="this.remove()">{% endif %}
+  {% if gate.album.cover_image_url %}<img class="cover" src="{{ gate.album.cover_image_url }}" alt="" width="360" height="360" onerror="this.remove()">{% endif %}
   <p>{{ gate.album.artist }} — {{ gate.album.title }}（{{ gate.album.year }}）</p>
   <p>前一天有聽嗎？</p>
   <form method="post" action="/gate">
@@ -26,7 +26,7 @@
   </form>
 {% elif pick %}
   <h1>今日專輯</h1>
-  {% if pick.album.cover_image_url %}<img class="cover" src="{{ pick.album.cover_image_url }}" alt="" width="480" height="480" onerror="this.remove()">{% endif %}
+  {% if pick.album.cover_image_url %}<img class="cover" src="{{ pick.album.cover_image_url }}" alt="" width="360" height="360" onerror="this.remove()">{% endif %}
   <h2>{{ pick.album.artist }} — {{ pick.album.title }}</h2>
   <p>{{ pick.album.year }}{% if pick.album.genre %} · {{ pick.album.genre }}{% endif %}</p>
   <p>

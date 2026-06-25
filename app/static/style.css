@@ -84,6 +84,10 @@ input[type="search"] { padding: 0.3rem 0.5rem; }
 
 /* vinyl sleeve effect for the big cover on home/draw pages */
 img.cover {
+  width: 100%;
+  max-width: 360px;
+  aspect-ratio: 1 / 1;
+  height: auto;
   object-fit: cover;
   border: 1px solid var(--ink);
   box-shadow: 0.4rem 0.4rem 0 var(--shadow);
