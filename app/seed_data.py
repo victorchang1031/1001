@@ -1,4 +1,6 @@
-from app.models import Album
+import re
+from collections import defaultdict
+from app.models import Album, QueueEntry, DailyPick, DrawHistory
 
 SAMPLE_ALBUMS = [
     {"title": "Kind of Blue", "artist": "Miles Davis", "year": 1959, "genre": "Jazz"},
@@ -1152,3 +1154,35 @@ def seed_albums(db) -> int:
         db.add(Album(**a))
     db.commit()
     return len(SAMPLE_ALBUMS)
+
+
+def _dedup_key(title: str, artist: str) -> str:
+    # &↔and、有無 . / 空白 / 前後贅字差異視為同一張
+    s = f"{title}\x00{artist}".lower().replace("&", "and")
+    return re.sub(r"[^a-z0-9\x00]", "", s)
+
+
+def dedup_albums(db) -> int:
+    # idempotent：同一張的重複只留一筆（優先有真封面、否則 id 最小），
+    # 歷史轉到保留筆、刪掉重複筆的 queue 條目與專輯。跑完無重複即 no-op。
+    groups = defaultdict(list)
+    for a in db.query(Album).all():
+        groups[_dedup_key(a.title, a.artist)].append(a)
+    removed = 0
+    for albums in groups.values():
+        if len(albums) < 2:
+            continue
+        keeper = max(albums, key=lambda a: (
+            bool(a.cover_image_url and a.cover_image_url.startswith("http")), -a.id,
+        ))
+        for loser in albums:
+            if loser is keeper:
+                continue
+            db.query(DailyPick).filter(DailyPick.album_id == loser.id).update({"album_id": keeper.id})
+            db.query(DrawHistory).filter(DrawHistory.album_id == loser.id).update({"album_id": keeper.id})
+            db.query(QueueEntry).filter(QueueEntry.album_id == loser.id).delete()
+            db.delete(loser)
+            removed += 1
+    if removed:
+        db.commit()
+    return removed

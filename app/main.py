@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.database import init_db, get_db, SessionLocal
 from app.models import Album, DailyPick, DrawHistory, Comment
 from app.queue_logic import initialize_queue
-from app.seed_data import seed_albums
+from app.seed_data import seed_albums, dedup_albums
 from app.scheduler import start_scheduler
 from app.spotify import ensure_spotify_url, start_cover_backfill
 from app.music_links import wikipedia_url, wikipedia_search_url
@@ -24,6 +24,7 @@ async def lifespan(app: FastAPI):
     init_db()
     with SessionLocal() as db:
         seed_albums(db)
+        dedup_albums(db)
         initialize_queue(db)
     start_scheduler()
     start_cover_backfill()
