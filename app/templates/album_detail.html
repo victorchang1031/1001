@@ -9,7 +9,7 @@
   {% else %}
     <a href="https://open.spotify.com/search/{{ album.title | urlencode }}%20{{ album.artist | urlencode }}" target="_blank">Spotify</a>
   {% endif %}
-  | <a href="{{ album.wikipedia_url }}" target="_blank">Wikipedia</a>
+  | <a href="{{ album.wikipedia_url or wiki_search_url(album.title, album.artist) }}" target="_blank">Wikipedia</a>
 </p>
 <h3>評論紀錄</h3>
 {% for pick in picks %}

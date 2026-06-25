@@ -15,7 +15,7 @@ from app.queue_logic import initialize_queue
 from app.seed_data import seed_albums
 from app.scheduler import start_scheduler
 from app.spotify import ensure_spotify_url, start_cover_backfill
-from app.music_links import wikipedia_url
+from app.music_links import wikipedia_url, wikipedia_search_url
 from app import daily
 
 
@@ -34,6 +34,7 @@ app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 templates.env.globals["css_version"] = lambda: int(os.path.getmtime("app/static/style.css"))
+templates.env.globals["wiki_search_url"] = wikipedia_search_url
 
 
 @app.get("/")

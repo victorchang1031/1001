@@ -35,7 +35,7 @@
     {% else %}
       <a href="https://open.spotify.com/search/{{ pick.album.title | urlencode }}%20{{ pick.album.artist | urlencode }}" target="_blank">Spotify</a>
     {% endif %}
-    | <a href="{{ pick.album.wikipedia_url }}" target="_blank">Wikipedia</a>
+    | <a href="{{ pick.album.wikipedia_url or wiki_search_url(pick.album.title, pick.album.artist) }}" target="_blank">Wikipedia</a>
   </p>
   <h3>評論</h3>
   <form method="post" action="/comment">
