@@ -19,6 +19,27 @@ _MB_UA = "DailyAlbum/1.0 ( victorchang891031@gmail.com )"
 
 MATCH_THRESHOLD = 0.7
 
+# 抓圖時用的查詢覆寫：原始 (title, artist) → 改用的搜尋 (title, artist)。
+# 只影響封面搜尋，不改顯示名稱；給藝人/標題帶雜訊、各來源都搜不到的少數專輯用。
+COVER_QUERY_OVERRIDES = {
+    ("Moon Safari", "AIR French Band"): ("Moon Safari", "Air"),
+    ("Sunday At The Village Vanguard", "Bill Evans Trio Featuring Scott La Faro"): ("Sunday at the Village Vanguard", "Bill Evans"),
+    ("Zombie", "Fela Anikulapo Kuti & Africa 70 Organization"): ("Zombie", "Fela Kuti"),
+    ("†", "Justice"): ("Cross", "Justice"),
+    ("Untitled", "Led Zeppelin"): ("Led Zeppelin IV", "Led Zeppelin"),
+    ("Bongo Rock", "Michael Viner's Incredible Bongo Band"): ("Bongo Rock", "Incredible Bongo Band"),
+    ("Hariprasad Chaurasia - Brijbhushan Kabra* - Call Of The Valley", "Shivkumar Sharma"): ("Call of the Valley", "Shivkumar Sharma"),
+    ("Performed By Members Of Penguin Café Orchestra, The* - Music From The Penguin Café", "Simon Jeffes"): ("Music from the Penguin Cafe", "Penguin Cafe Orchestra"),
+    ("Sufjan Stevens Invites You To: Come On Feel The Illinoise", "Sufjan Stevens"): ("Illinois", "Sufjan Stevens"),
+    ('"Live" At The Star-Club, Hamburg', "The Jerry Lee Lewis And Nashville Teens"): ("Live at the Star-Club Hamburg", "Jerry Lee Lewis"),
+    ("S&M", "The Metallica With Michael Kamen Conducting San Francisco Symphony Orchestra"): ("S&M", "Metallica"),
+    ("A Christmas Gift For You From Philles Records", "Various"): ("A Christmas Gift for You from Phil Spector", "Phil Spector"),
+}
+
+
+def _cover_query(album: Album) -> tuple[str, str]:
+    return COVER_QUERY_OVERRIDES.get((album.title, album.artist), (album.title, album.artist))
+
 
 def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "", (s or "").lower())
@@ -203,7 +224,7 @@ def ensure_spotify_url(db, album: Album, client: httpx.Client | None = None) -> 
         if not token:
             _ensure_cover_fallback(db, album, client)
             return None
-        result = search_album(client, token, album.title, album.artist)
+        result = search_album(client, token, *_cover_query(album))
         if result:
             album.spotify_url = result["url"]
             album.cover_image_url = result["image"]
@@ -354,11 +375,12 @@ def _ensure_cover_fallback(db, album: Album, client: httpx.Client | None) -> Non
     own_client = client is None
     client = client or httpx.Client()
     try:
+        title, artist = _cover_query(album)
         cover = (
-            itunes_cover_url(client, album.title, album.artist)
-            or deezer_cover_url(client, album.title, album.artist)
-            or discogs_cover_url(client, album.title, album.artist)
-            or musicbrainz_cover_url(client, album.title, album.artist)
+            itunes_cover_url(client, title, artist)
+            or deezer_cover_url(client, title, artist)
+            or discogs_cover_url(client, title, artist)
+            or musicbrainz_cover_url(client, title, artist)
         )
         album.cover_image_url = cover or _placeholder_cover_url(album.title, album.artist)
         db.commit()

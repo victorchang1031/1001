@@ -134,6 +134,27 @@ def test_musicbrainz_rejects_wrong_release():
     assert cover is None
 
 
+def test_cover_query_override_used_for_noisy_artist(monkeypatch):
+    monkeypatch.setattr(spotify.settings, "spotify_client_id", None)
+    monkeypatch.setattr(spotify.settings, "spotify_client_secret", None)
+    seen = {}
+
+    def handler(request):
+        seen["term"] = request.url.params.get("term", "")
+        return httpx.Response(200, json={"results": [{
+            "collectionName": "Moon Safari", "artistName": "Air",
+            "artworkUrl100": "https://e/100x100.jpg",
+        }]})
+
+    with SessionLocal() as s:
+        a = Album(title="Moon Safari", artist="AIR French Band", year=1998)
+        s.add(a)
+        s.commit()
+        spotify.ensure_spotify_url(s, a, client=_mock_client(handler))
+        assert a.cover_image_url == "https://e/600x600.jpg"
+    assert "Air" in seen["term"] and "French Band" not in seen["term"]
+
+
 def test_backfill_fills_missing_cover(monkeypatch):
     monkeypatch.setattr(spotify.settings, "spotify_client_id", None)
     monkeypatch.setattr(spotify.settings, "spotify_client_secret", None)
