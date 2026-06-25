@@ -13,6 +13,7 @@ class Settings:
     reveal_hour: int = 8
     random_seed: int = 42
     database_url: str = os.getenv("DATABASE_URL", "sqlite:///./app.db")
+    admin_key: str | None = os.getenv("ADMIN_KEY") or None
 
 
 settings = Settings()

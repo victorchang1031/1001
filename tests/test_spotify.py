@@ -153,6 +153,44 @@ def test_backfill_fills_missing_cover(monkeypatch):
         assert a.cover_image_url == "https://e/600x600.jpg"
 
 
+def test_short_title_rejects_near_number(monkeypatch):
+    # "25" 不該配到 "21"（標題門檻擋下）
+    def handler(request):
+        return httpx.Response(200, json={"results": [{
+            "collectionName": "21", "artistName": "Adele",
+            "artworkUrl100": "https://e/21_100x100.jpg",
+        }]})
+
+    cover = spotify.itunes_cover_url(_mock_client(handler), "25", "Adele")
+    assert cover is None
+
+
+def test_backfill_force_and_duplicate_clear(monkeypatch):
+    monkeypatch.setattr(spotify.settings, "spotify_client_id", None)
+    monkeypatch.setattr(spotify.settings, "spotify_client_secret", None)
+
+    # 兩張不同專輯共用同一張錯圖 → 應被清掉重抓成各自正確的
+    def handler(request):
+        term = request.url.params.get("term", "")
+        name = "25" if "25" in term else "21"
+        return httpx.Response(200, json={"results": [{
+            "collectionName": name, "artistName": "Adele",
+            "artworkUrl100": f"https://e/{name}_100x100.jpg",
+        }]})
+
+    with SessionLocal() as s:
+        s.add_all([
+            Album(title="21", artist="Adele", year=2011, cover_image_url="https://wrong/same.jpg"),
+            Album(title="25", artist="Adele", year=2015, cover_image_url="https://wrong/same.jpg"),
+        ])
+        s.commit()
+    spotify.backfill_missing_covers(sleep=0, client=_mock_client(handler))
+    with SessionLocal() as s:
+        covers = {a.title: a.cover_image_url for a in s.query(Album).all()}
+        assert covers["21"] == "https://e/21_600x600.jpg"
+        assert covers["25"] == "https://e/25_600x600.jpg"
+
+
 def test_deezer_cover_url_rejects_mismatch():
     def handler(request):
         return httpx.Response(200, json={"data": [{

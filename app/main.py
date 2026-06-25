@@ -14,6 +14,7 @@ from app.models import Album, DailyPick, DrawHistory, Comment
 from app.queue_logic import initialize_queue
 from app.seed_data import seed_albums, dedup_albums
 from app.scheduler import start_scheduler
+from app.config import settings
 from app.spotify import ensure_spotify_url, start_cover_backfill
 from app.music_links import wikipedia_url, wikipedia_search_url
 from app import daily
@@ -78,6 +79,14 @@ def comment(
     if pick:
         daily.add_comment(db, pick, content, int(rating) if rating else None)
     return RedirectResponse("/", status_code=303)
+
+
+@app.get("/admin/refetch-covers")
+def refetch_covers(key: str, db: Session = Depends(get_db)):
+    if not settings.admin_key or key != settings.admin_key:
+        raise HTTPException(status_code=403, detail="forbidden")
+    start_cover_backfill(force=True)
+    return {"status": "refetching all covers in background", "albums": db.query(Album).count()}
 
 
 @app.get("/history")

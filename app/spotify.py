@@ -24,21 +24,28 @@ def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "", (s or "").lower())
 
 
-def _match_score(want_title: str, want_artist: str, got_title: str, got_artist: str) -> float:
-    # ponytail: 藝人權重 0.5，錯藝人是最常見的錯封面；不夠準再調權重或門檻
+TITLE_GATE = 0.6
+
+
+def _match_score(want_title: str, want_artist: str, got_title: str, got_artist: str) -> float | None:
+    # 標題必須夠像才算數（擋掉 "21" 配到 "25" 這種短標題＋同藝人的誤判）；
+    # 過關後藝人權重 0.5，錯藝人是最常見的錯封面。回 None 表示不接受。
     t = SequenceMatcher(None, _norm(want_title), _norm(got_title)).ratio()
+    if t < TITLE_GATE:
+        return None
     a = SequenceMatcher(None, _norm(want_artist), _norm(got_artist)).ratio()
-    return 0.5 * t + 0.5 * a
+    score = 0.5 * t + 0.5 * a
+    return score if score >= MATCH_THRESHOLD else None
 
 
 def _pick_best(want_title: str, want_artist: str, candidates: list) -> object | None:
-    # candidates: [(got_title, got_artist, payload), ...]，取最高分且過門檻者，否則 None
+    # candidates: [(got_title, got_artist, payload), ...]，取分數最高且過門檻者
     best, best_score = None, 0.0
     for got_title, got_artist, payload in candidates:
         score = _match_score(want_title, want_artist, got_title, got_artist)
-        if score > best_score:
+        if score is not None and score > best_score:
             best, best_score = payload, score
-    return best if best_score >= MATCH_THRESHOLD else None
+    return best
 
 
 def _retry(fn):
@@ -257,7 +264,7 @@ def _musicbrainz_query(client: httpx.Client, title: str, artist: str) -> str | N
     resp.raise_for_status()
     for rel in resp.json().get("releases", []):
         got_artist = (rel.get("artist-credit") or [{}])[0].get("name", "")
-        if _match_score(title, artist, rel.get("title", ""), got_artist) < MATCH_THRESHOLD:
+        if _match_score(title, artist, rel.get("title", ""), got_artist) is None:
             continue
         # release 沒圖時退而求其次找整個 release-group 的封面
         cover = _caa_front(client, "release", rel["id"])
@@ -280,10 +287,26 @@ def musicbrainz_cover_url(client: httpx.Client, title: str, artist: str) -> str 
         return None
 
 
-def backfill_missing_covers(sleep: float = 0.2, client: httpx.Client | None = None, max_passes: int = 3) -> int:
+def _clear_duplicate_covers(db) -> int:
+    # 同一張封面網址被多張專輯共用 → 至少一張配錯（如 Adele 21/25 共用一圖）；
+    # 全部清掉讓它們用修好的匹配重抓。封面正常時各自唯一，這裡是 no-op。
+    from sqlalchemy import func
+    dupes = [u for (u,) in db.query(Album.cover_image_url)
+             .filter(Album.cover_image_url.like("http%"))
+             .group_by(Album.cover_image_url).having(func.count() > 1).all()]
+    if not dupes:
+        return 0
+    n = db.query(Album).filter(Album.cover_image_url.in_(dupes)).update(
+        {"cover_image_url": None, "spotify_url": None}, synchronize_session=False)
+    db.commit()
+    return n
+
+
+def backfill_missing_covers(sleep: float = 0.2, client: httpx.Client | None = None,
+                            max_passes: int = 3, force: bool = False) -> int:
     # 補所有缺圖／只有 placeholder 的專輯；已有真實封面的會被 filter 排除，重啟不重抓。
     # 多跑幾輪：首輪大量抓取常被限流而留下 placeholder，後續輪只處理剩下的少數，
-    # 不會再限流；沒進展就停（剩的是真的難匹配的）。
+    # 不會再限流；沒進展就停（剩的是真的難匹配的）。force=True 則先清空全部重抓。
     from app.database import SessionLocal
     own_client = client is None
     client = client or httpx.Client(timeout=10)
@@ -291,6 +314,12 @@ def backfill_missing_covers(sleep: float = 0.2, client: httpx.Client | None = No
     missing = Album.cover_image_url.is_(None) | Album.cover_image_url.like("data:%")
     filled = 0
     try:
+        if force:
+            db.query(Album).update({"cover_image_url": None, "spotify_url": None},
+                                   synchronize_session=False)
+            db.commit()
+        else:
+            _clear_duplicate_covers(db)
         prev_remaining = None
         for _ in range(max_passes):
             albums = db.query(Album).filter(missing).all()
@@ -316,9 +345,9 @@ def backfill_missing_covers(sleep: float = 0.2, client: httpx.Client | None = No
             client.close()
 
 
-def start_cover_backfill() -> None:
+def start_cover_backfill(force: bool = False) -> None:
     # ponytail: daemon 執行緒在背景補圖，不擋 web server 啟動（Render 啟動有逾時）
-    threading.Thread(target=backfill_missing_covers, daemon=True).start()
+    threading.Thread(target=backfill_missing_covers, kwargs={"force": force}, daemon=True).start()
 
 
 def _ensure_cover_fallback(db, album: Album, client: httpx.Client | None) -> None:
