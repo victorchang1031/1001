@@ -1167,6 +1167,20 @@ MERGE_DUPLICATES = [
 ]
 
 
+# 同一張被兩批 seed 用不同 title＋artist 收錄，正規化抓不到的跨藝人重複。
+# (drop_title, drop_artist, keep_title, keep_artist)；keep 用帶 genre 的後加批。
+MERGE_DUPLICATES_CROSS = [
+    ("The Beatles", "The Beatles", "The White Album", "Beatles"),
+    ("Beggars Banquet (The Mono Beggars)", "Rolling Stones", "Beggars Banquet", "The Rolling Stones"),
+    ("Kick Out The Jams", "MC5", "Kick Out The Jams (Live)", "MC5"),
+    ("Untitled", "Led Zeppelin", "Led Zeppelin IV", "Led Zeppelin"),
+    ("África Brasil", "Jorge Ben", "Africa Brasil", "Jorge Ben Jor"),
+    ("Performed By Members Of Penguin Café Orchestra, The* - Music From The Penguin Café", "Simon Jeffes", "Music From The Penguin Cafe", "Penguin Cafe Orchestra"),
+    ("Sufjan Stevens Invites You To: Come On Feel The Illinoise", "Sufjan Stevens", "Illinois", "Sufjan Stevens"),
+    ("†", "Justice", "Cross", "Justice"),
+]
+
+
 def _merge_album(db, loser: Album, keeper: Album) -> None:
     db.query(DailyPick).filter(DailyPick.album_id == loser.id).update({"album_id": keeper.id})
     db.query(DrawHistory).filter(DrawHistory.album_id == loser.id).update({"album_id": keeper.id})
@@ -1182,6 +1196,13 @@ def dedup_albums(db) -> int:
         keeper = db.query(Album).filter_by(title=keep_title, artist=artist).first()
         loser = db.query(Album).filter_by(title=drop_title, artist=artist).first()
         if keeper and loser:
+            _merge_album(db, loser, keeper)
+            removed += 1
+
+    for drop_title, drop_artist, keep_title, keep_artist in MERGE_DUPLICATES_CROSS:
+        keeper = db.query(Album).filter_by(title=keep_title, artist=keep_artist).first()
+        loser = db.query(Album).filter_by(title=drop_title, artist=drop_artist).first()
+        if keeper and loser and loser is not keeper:
             _merge_album(db, loser, keeper)
             removed += 1
 
