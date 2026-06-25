@@ -91,7 +91,17 @@ def spotify_status():
     if creds:
         with httpx.Client() as c:
             token_ok = bool(spotify.get_access_token(c))
-    return {"creds_present": creds, "token_ok": token_ok}
+    rid = os.getenv("SPOTIFY_CLIENT_ID")
+    rsecret = os.getenv("SPOTIFY_CLIENT_SECRET")
+    return {
+        "creds_present": creds,
+        "token_ok": token_ok,
+        "env_keys_seen": [k for k in os.environ if "SPOTIFY" in k.upper()],
+        "id_len": len(rid) if rid else 0,
+        "secret_len": len(rsecret) if rsecret else 0,
+        "id_has_whitespace": bool(rid and rid != rid.strip()),
+        "secret_has_whitespace": bool(rsecret and rsecret != rsecret.strip()),
+    }
 
 
 @app.get("/admin/refetch-covers")
