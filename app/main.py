@@ -14,7 +14,7 @@ from app.models import Album, DailyPick, DrawHistory, Comment
 from app.queue_logic import initialize_queue
 from app.seed_data import seed_albums
 from app.scheduler import start_scheduler
-from app.spotify import ensure_spotify_url
+from app.spotify import ensure_spotify_url, start_cover_backfill
 from app.music_links import wikipedia_url
 from app import daily
 
@@ -26,6 +26,7 @@ async def lifespan(app: FastAPI):
         seed_albums(db)
         initialize_queue(db)
     start_scheduler()
+    start_cover_backfill()
     yield
 
 

@@ -102,6 +102,25 @@ def test_deezer_cover_url_matches_and_returns_xl():
     assert cover == "https://e-cdns/cover_xl.jpg"
 
 
+def test_backfill_fills_missing_cover(monkeypatch):
+    monkeypatch.setattr(spotify.settings, "spotify_client_id", None)
+    monkeypatch.setattr(spotify.settings, "spotify_client_secret", None)
+
+    def handler(request):
+        return httpx.Response(200, json={"results": [{
+            "collectionName": "X", "artistName": "Y",
+            "artworkUrl100": "https://e/100x100.jpg",
+        }]})
+
+    with SessionLocal() as s:
+        s.add(Album(title="X", artist="Y", year=2000))
+        s.commit()
+    spotify.backfill_missing_covers(sleep=0, client=_mock_client(handler))
+    with SessionLocal() as s:
+        a = s.query(Album).first()
+        assert a.cover_image_url == "https://e/600x600.jpg"
+
+
 def test_deezer_cover_url_rejects_mismatch():
     def handler(request):
         return httpx.Response(200, json={"data": [{

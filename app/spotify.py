@@ -1,5 +1,6 @@
 import base64
 import re
+import threading
 import time
 from difflib import SequenceMatcher
 from html import escape
@@ -236,6 +237,36 @@ def _placeholder_cover_url(title: str, artist: str) -> str:
         f'dominant-baseline="middle" font-family="sans-serif">{label}</text></svg>'
     )
     return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
+
+
+def backfill_missing_covers(sleep: float = 0.2, client: httpx.Client | None = None) -> int:
+    # 補所有缺圖／只有 placeholder 的專輯；已有真實封面的會被 filter 排除，重啟不重抓
+    from app.database import SessionLocal
+    own_client = client is None
+    client = client or httpx.Client(timeout=10)
+    db = SessionLocal()
+    try:
+        albums = db.query(Album).filter(
+            Album.cover_image_url.is_(None) | Album.cover_image_url.like("data:%")
+        ).all()
+        for album in albums:
+            album.spotify_url = None
+            album.cover_image_url = None
+            try:
+                ensure_spotify_url(db, album, client)
+            except Exception:
+                db.rollback()
+            time.sleep(sleep)
+        return len(albums)
+    finally:
+        db.close()
+        if own_client:
+            client.close()
+
+
+def start_cover_backfill() -> None:
+    # ponytail: daemon 執行緒在背景補圖，不擋 web server 啟動（Render 啟動有逾時）
+    threading.Thread(target=backfill_missing_covers, daemon=True).start()
 
 
 def _ensure_cover_fallback(db, album: Album, client: httpx.Client | None) -> None:
