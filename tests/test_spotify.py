@@ -25,6 +25,8 @@ def test_search_album_returns_url_and_image(monkeypatch):
             return httpx.Response(200, json={
                 "albums": {"items": [
                     {
+                        "name": "Kind of Blue",
+                        "artists": [{"name": "Miles Davis"}],
                         "external_urls": {"spotify": "https://open.spotify.com/album/xyz"},
                         "images": [{"url": "https://i.scdn.co/image/cover.jpg"}],
                     }
@@ -62,12 +64,54 @@ def test_ensure_spotify_url_none_when_no_credentials(monkeypatch):
 def test_itunes_cover_url_returns_high_res_artwork():
     def handler(request):
         return httpx.Response(200, json={
-            "results": [{"artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/100x100bb.jpg"}]
+            "results": [{
+                "collectionName": "Kind of Blue",
+                "artistName": "Miles Davis",
+                "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/100x100bb.jpg",
+            }]
         })
 
     client = _mock_client(handler)
     cover = spotify.itunes_cover_url(client, "Kind of Blue", "Miles Davis")
     assert cover == "https://is1-ssl.mzstatic.com/image/thumb/600x600bb.jpg"
+
+
+def test_match_rejects_wrong_artist():
+    def handler(request):
+        return httpx.Response(200, json={
+            "results": [{
+                "collectionName": "Kind of Blue",
+                "artistName": "Some Tribute Band",
+                "artworkUrl100": "https://example/100x100.jpg",
+            }]
+        })
+
+    cover = spotify.itunes_cover_url(_mock_client(handler), "Kind of Blue", "Miles Davis")
+    assert cover is None
+
+
+def test_deezer_cover_url_matches_and_returns_xl():
+    def handler(request):
+        return httpx.Response(200, json={"data": [{
+            "title": "Kind of Blue",
+            "artist": {"name": "Miles Davis"},
+            "cover_xl": "https://e-cdns/cover_xl.jpg",
+        }]})
+
+    cover = spotify.deezer_cover_url(_mock_client(handler), "Kind of Blue", "Miles Davis")
+    assert cover == "https://e-cdns/cover_xl.jpg"
+
+
+def test_deezer_cover_url_rejects_mismatch():
+    def handler(request):
+        return httpx.Response(200, json={"data": [{
+            "title": "Completely Different Album",
+            "artist": {"name": "Other Artist"},
+            "cover_xl": "https://e-cdns/wrong.jpg",
+        }]})
+
+    cover = spotify.deezer_cover_url(_mock_client(handler), "Kind of Blue", "Miles Davis")
+    assert cover is None
 
 
 def test_cover_image_always_set_even_when_all_lookups_fail(monkeypatch):

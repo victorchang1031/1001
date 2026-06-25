@@ -1,6 +1,7 @@
 import base64
 import re
 import time
+from difflib import SequenceMatcher
 from html import escape
 import httpx
 from app.config import settings
@@ -10,6 +11,30 @@ TOKEN_URL = "https://accounts.spotify.com/api/token"
 SEARCH_URL = "https://api.spotify.com/v1/search"
 DISCOGS_SEARCH_URL = "https://api.discogs.com/database/search"
 ITUNES_SEARCH_URL = "https://itunes.apple.com/search"
+DEEZER_SEARCH_URL = "https://api.deezer.com/search/album"
+
+MATCH_THRESHOLD = 0.7
+
+
+def _norm(s: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+
+
+def _match_score(want_title: str, want_artist: str, got_title: str, got_artist: str) -> float:
+    # ponytail: 藝人權重 0.5，錯藝人是最常見的錯封面；不夠準再調權重或門檻
+    t = SequenceMatcher(None, _norm(want_title), _norm(got_title)).ratio()
+    a = SequenceMatcher(None, _norm(want_artist), _norm(got_artist)).ratio()
+    return 0.5 * t + 0.5 * a
+
+
+def _pick_best(want_title: str, want_artist: str, candidates: list) -> object | None:
+    # candidates: [(got_title, got_artist, payload), ...]，取最高分且過門檻者，否則 None
+    best, best_score = None, 0.0
+    for got_title, got_artist, payload in candidates:
+        score = _match_score(want_title, want_artist, got_title, got_artist)
+        if score > best_score:
+            best, best_score = payload, score
+    return best if best_score >= MATCH_THRESHOLD else None
 
 
 def _retry(fn):
@@ -64,44 +89,52 @@ def get_access_token(client: httpx.Client) -> str | None:
         return None
 
 
-def _spotify_query(client: httpx.Client, token: str, q: str) -> dict | None:
+def _spotify_query(client: httpx.Client, token: str, q: str, want_title: str, want_artist: str) -> dict | None:
     resp = client.get(
         SEARCH_URL,
         headers={"Authorization": f"Bearer {token}"},
-        params={"q": q, "type": "album", "limit": 1},
+        params={"q": q, "type": "album", "limit": 5},
     )
     resp.raise_for_status()
     items = resp.json().get("albums", {}).get("items", [])
-    if not items:
-        return None
-    item = items[0]
-    images = item.get("images") or []
-    return {
-        "url": item.get("external_urls", {}).get("spotify"),
-        "image": images[0].get("url") if images else None,
-    }
+    candidates = []
+    for item in items:
+        images = item.get("images") or []
+        got_artist = ", ".join(a.get("name", "") for a in item.get("artists", []))
+        candidates.append((item.get("name", ""), got_artist, {
+            "url": item.get("external_urls", {}).get("spotify"),
+            "image": images[0].get("url") if images else None,
+        }))
+    return _pick_best(want_title, want_artist, candidates)
 
 
 def search_album(client: httpx.Client, token: str, title: str, artist: str) -> dict | None:
     title, artist = _clean_query_text(title), _clean_query_text(artist)
     try:
-        result = _retry(lambda: _spotify_query(client, token, f"album:{title} artist:{artist}"))
+        result = _retry(lambda: _spotify_query(client, token, f"album:{title} artist:{artist}", title, artist))
         if result:
             return result
-        return _retry(lambda: _spotify_query(client, token, title))
+        return _retry(lambda: _spotify_query(client, token, title, title, artist))
     except (httpx.HTTPError, ValueError):
         return None
 
 
-def _discogs_query(client: httpx.Client, headers: dict, params: dict) -> str | None:
+def _discogs_query(client: httpx.Client, headers: dict, params: dict, want_title: str, want_artist: str) -> str | None:
     resp = client.get(DISCOGS_SEARCH_URL, headers=headers, params=params)
     resp.raise_for_status()
     results = resp.json().get("results", [])
-    if not results:
-        return None
-    cover = results[0].get("cover_image") or results[0].get("thumb") or None
-    # ponytail: Discogs returns a 1x1 spacer.gif placeholder when a release has no real image
-    return None if cover and "spacer.gif" in cover else cover
+    # Discogs 的 title 是 "Artist - Title" 合併字串，直接整串比對
+    want = _norm(f"{want_artist} {want_title}")
+    best, best_score = None, 0.0
+    for r in results:
+        cover = r.get("cover_image") or r.get("thumb")
+        # ponytail: Discogs returns a 1x1 spacer.gif placeholder when a release has no real image
+        if not cover or "spacer.gif" in cover:
+            continue
+        score = SequenceMatcher(None, want, _norm(r.get("title", ""))).ratio()
+        if score > best_score:
+            best, best_score = cover, score
+    return best if best_score >= MATCH_THRESHOLD else None
 
 
 def discogs_cover_url(client: httpx.Client, title: str, artist: str) -> str | None:
@@ -111,11 +144,33 @@ def discogs_cover_url(client: httpx.Client, title: str, artist: str) -> str | No
         headers["Authorization"] = f"Discogs token={settings.discogs_token}"
     try:
         cover = _retry(lambda: _discogs_query(
-            client, headers, {"release_title": title, "artist": artist, "type": "release", "per_page": 1}
+            client, headers, {"release_title": title, "artist": artist, "type": "release", "per_page": 5}, title, artist
         ))
         if cover:
             return cover
-        return _retry(lambda: _discogs_query(client, headers, {"q": f"{artist} {title}", "type": "release", "per_page": 1}))
+        return _retry(lambda: _discogs_query(
+            client, headers, {"q": f"{artist} {title}", "type": "release", "per_page": 5}, title, artist
+        ))
+    except (httpx.HTTPError, ValueError):
+        return None
+
+
+def _deezer_query(client: httpx.Client, params: dict, want_title: str, want_artist: str) -> str | None:
+    resp = client.get(DEEZER_SEARCH_URL, params=params)
+    resp.raise_for_status()
+    data = resp.json().get("data", [])
+    candidates = [
+        (r.get("title", ""), r.get("artist", {}).get("name", ""), r.get("cover_xl") or r.get("cover_big"))
+        for r in data
+    ]
+    return _pick_best(want_title, want_artist, candidates)
+
+
+def deezer_cover_url(client: httpx.Client, title: str, artist: str) -> str | None:
+    # ponytail: 免 key、免 token、覆蓋率高；放在 iTunes 之後、Discogs 之前
+    title, artist = _clean_query_text(title), _clean_query_text(artist)
+    try:
+        return _retry(lambda: _deezer_query(client, {"q": f"{artist} {title}", "limit": 5}, title, artist))
     except (httpx.HTTPError, ValueError):
         return None
 
@@ -148,14 +203,16 @@ def ensure_spotify_url(db, album: Album, client: httpx.Client | None = None) -> 
             client.close()
 
 
-def _itunes_query(client: httpx.Client, params: dict) -> str | None:
+def _itunes_query(client: httpx.Client, params: dict, want_title: str, want_artist: str) -> str | None:
     resp = client.get(ITUNES_SEARCH_URL, params=params)
     resp.raise_for_status()
     results = resp.json().get("results", [])
-    if not results:
-        return None
-    art = results[0].get("artworkUrl100")
-    return art.replace("100x100", "600x600") if art else None
+    candidates = []
+    for r in results:
+        art = r.get("artworkUrl100")
+        image = art.replace("100x100", "600x600") if art else None
+        candidates.append((r.get("collectionName", ""), r.get("artistName", ""), image))
+    return _pick_best(want_title, want_artist, candidates)
 
 
 def itunes_cover_url(client: httpx.Client, title: str, artist: str) -> str | None:
@@ -163,7 +220,7 @@ def itunes_cover_url(client: httpx.Client, title: str, artist: str) -> str | Non
     title, artist = _clean_query_text(title), _clean_query_text(artist)
     try:
         return _retry(lambda: _itunes_query(
-            client, {"term": f"{artist} {title}", "entity": "album", "limit": 1}
+            client, {"term": f"{artist} {title}", "entity": "album", "limit": 5}, title, artist
         ))
     except (httpx.HTTPError, ValueError):
         return None
@@ -185,7 +242,11 @@ def _ensure_cover_fallback(db, album: Album, client: httpx.Client | None) -> Non
     own_client = client is None
     client = client or httpx.Client()
     try:
-        cover = itunes_cover_url(client, album.title, album.artist) or discogs_cover_url(client, album.title, album.artist)
+        cover = (
+            itunes_cover_url(client, album.title, album.artist)
+            or deezer_cover_url(client, album.title, album.artist)
+            or discogs_cover_url(client, album.title, album.artist)
+        )
         album.cover_image_url = cover or _placeholder_cover_url(album.title, album.artist)
         db.commit()
     finally:
