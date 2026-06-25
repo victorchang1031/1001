@@ -81,6 +81,19 @@ def comment(
     return RedirectResponse("/", status_code=303)
 
 
+@app.get("/admin/spotify-status")
+def spotify_status():
+    import httpx
+    from app import spotify
+    spotify._token_cache.update(token=None, expires_at=0.0)
+    creds = bool(settings.spotify_client_id and settings.spotify_client_secret)
+    token_ok = False
+    if creds:
+        with httpx.Client() as c:
+            token_ok = bool(spotify.get_access_token(c))
+    return {"creds_present": creds, "token_ok": token_ok}
+
+
 @app.get("/admin/refetch-covers")
 def refetch_covers(key: str, db: Session = Depends(get_db)):
     if not settings.admin_key or key != settings.admin_key:
