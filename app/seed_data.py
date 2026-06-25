@@ -107,7 +107,6 @@ SAMPLE_ALBUMS = [
     {"title": "Are You Experienced", "artist": "The Jimi Hendrix Experience", "year": 1967, "genre": "Rock"},
     {"title": "I Had Too Much To Dream (Last Night)", "artist": "The Electric Prunes", "year": 1966},
     {"title": "Don't Come Home A Drinkin' (With Lovin' On Your Mind)", "artist": "Loretta Lynn", "year": 1967, "genre": "Country"},
-    {"title": "Hariprasad Chaurasia - Brijbhushan Kabra* - Call Of The Valley", "artist": "Shivkumar Sharma", "year": 1968},
     {"title": "White Light / White Heat", "artist": "The Velvet Underground", "year": 1967, "genre": "Rock"},
     {"title": "Beggars Banquet (The Mono Beggars)", "artist": "Rolling Stones", "year": 1968},
     {"title": "Traffic", "artist": "Traffic", "year": 1968, "genre": "Rock"},
@@ -1164,6 +1163,7 @@ MERGE_DUPLICATES = [
     ("Exile On Main St.", "Exile On Main Street", "The Rolling Stones"),
     ("D.o.A. The Third And Final Report", "D.O.A. the Third and Final Report of Throbbing Gristle", "Throbbing Gristle"),
     ("Duck Stab", "Duck Stab/Buster & Glen", "The Residents"),
+    ("Hariprasad Chaurasia - Brijbhushan Kabra* - Call Of The Valley", "Call of the Valley", "Shivkumar Sharma"),
 ]
 
 

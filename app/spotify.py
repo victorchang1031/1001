@@ -28,7 +28,6 @@ COVER_QUERY_OVERRIDES = {
     ("†", "Justice"): ("Cross", "Justice"),
     ("Untitled", "Led Zeppelin"): ("Led Zeppelin IV", "Led Zeppelin"),
     ("Bongo Rock", "Michael Viner's Incredible Bongo Band"): ("Bongo Rock", "Incredible Bongo Band"),
-    ("Hariprasad Chaurasia - Brijbhushan Kabra* - Call Of The Valley", "Shivkumar Sharma"): ("Call of the Valley", "Shivkumar Sharma"),
     ("Performed By Members Of Penguin Café Orchestra, The* - Music From The Penguin Café", "Simon Jeffes"): ("Music from the Penguin Cafe", "Penguin Cafe Orchestra"),
     ("Sufjan Stevens Invites You To: Come On Feel The Illinoise", "Sufjan Stevens"): ("Illinois", "Sufjan Stevens"),
     ('"Live" At The Star-Club, Hamburg', "The Jerry Lee Lewis And Nashville Teens"): ("Live at the Star-Club Hamburg", "Jerry Lee Lewis"),
