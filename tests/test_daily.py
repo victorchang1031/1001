@@ -32,6 +32,7 @@ def test_create_today_pick_and_wikipedia_link():
         pick = daily.get_or_create_today_pick(s, now.date(), now)
         assert pick is not None
         assert pick.status == "pending"
+        daily.enrich_album(s, pick.album)
         assert pick.album.wikipedia_url.startswith("https://en.wikipedia.org/w/index.php?search=")
 
 

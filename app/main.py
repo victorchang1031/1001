@@ -82,7 +82,9 @@ def comment(
 
 
 @app.get("/admin/spotify-status")
-def spotify_status():
+def spotify_status(key: str = ""):
+    if not settings.admin_key or key != settings.admin_key:
+        raise HTTPException(status_code=403, detail="forbidden")
     import httpx
     from app import spotify
     spotify._token_cache.update(token=None, expires_at=0.0)
@@ -132,7 +134,7 @@ def history(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/draw")
 def draw(request: Request, db: Session = Depends(get_db)):
-    album = random.choice(db.query(Album).all())
+    album = db.query(Album).order_by(func.random()).first()
     ensure_spotify_url(db, album)
     if not album.wikipedia_url:
         album.wikipedia_url = wikipedia_url(album.title, album.artist)
