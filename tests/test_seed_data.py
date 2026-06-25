@@ -46,6 +46,18 @@ def test_dedup_keeps_one_and_reassigns_history():
         assert s.query(QueueEntry).filter_by(album_id=drop_id).count() == 0
 
 
+def test_dedup_explicit_merge_keeps_canonical():
+    with SessionLocal() as s:
+        s.add_all([
+            Album(title="3rd", artist="Big Star", year=1978),
+            Album(title="Third/Sister Lovers", artist="Big Star", year=1978, genre="Rock"),
+        ])
+        s.commit()
+        dedup_albums(s)
+        titles = [a.title for a in s.query(Album).filter_by(artist="Big Star").all()]
+        assert titles == ["Third/Sister Lovers"]
+
+
 def test_sample_has_required_fields():
     assert len(SAMPLE_ALBUMS) >= 12
     for a in SAMPLE_ALBUMS:

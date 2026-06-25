@@ -396,7 +396,6 @@ SAMPLE_ALBUMS = [
     {"title": "All Mod Cons", "artist": "The Jam", "year": 1978, "genre": "Punk"},
     {"title": "Honky Tonk Masquerade", "artist": "Joe Ely", "year": 1978, "genre": "Country"},
     {"title": "Crossing The Red Sea With The Adverts", "artist": "The Adverts", "year": 1978, "genre": "Rock"},
-    {"title": "3rd", "artist": "Big Star", "year": 1978},
     {"title": "Duck Stab", "artist": "The Residents", "year": 1978},
     {"title": "Public Image - First Issue", "artist": "Public Image", "year": 1978, "genre": "Rock"},
     {"title": "Real Life", "artist": "Magazine", "year": 1978, "genre": "Punk"},
@@ -1162,13 +1161,33 @@ def _dedup_key(title: str, artist: str) -> str:
     return re.sub(r"[^a-z0-9\x00]", "", s)
 
 
+# 同一張專輯但命名差異大、正規化抓不到的，明確指定（drop_title, keep_title, artist）
+MERGE_DUPLICATES = [
+    ("3rd", "Third/Sister Lovers", "Big Star"),
+]
+
+
+def _merge_album(db, loser: Album, keeper: Album) -> None:
+    db.query(DailyPick).filter(DailyPick.album_id == loser.id).update({"album_id": keeper.id})
+    db.query(DrawHistory).filter(DrawHistory.album_id == loser.id).update({"album_id": keeper.id})
+    db.query(QueueEntry).filter(QueueEntry.album_id == loser.id).delete()
+    db.delete(loser)
+
+
 def dedup_albums(db) -> int:
     # idempotent：同一張的重複只留一筆（優先有真封面、否則 id 最小），
     # 歷史轉到保留筆、刪掉重複筆的 queue 條目與專輯。跑完無重複即 no-op。
+    removed = 0
+    for drop_title, keep_title, artist in MERGE_DUPLICATES:
+        keeper = db.query(Album).filter_by(title=keep_title, artist=artist).first()
+        loser = db.query(Album).filter_by(title=drop_title, artist=artist).first()
+        if keeper and loser:
+            _merge_album(db, loser, keeper)
+            removed += 1
+
     groups = defaultdict(list)
     for a in db.query(Album).all():
         groups[_dedup_key(a.title, a.artist)].append(a)
-    removed = 0
     for albums in groups.values():
         if len(albums) < 2:
             continue
@@ -1178,10 +1197,7 @@ def dedup_albums(db) -> int:
         for loser in albums:
             if loser is keeper:
                 continue
-            db.query(DailyPick).filter(DailyPick.album_id == loser.id).update({"album_id": keeper.id})
-            db.query(DrawHistory).filter(DrawHistory.album_id == loser.id).update({"album_id": keeper.id})
-            db.query(QueueEntry).filter(QueueEntry.album_id == loser.id).delete()
-            db.delete(loser)
+            _merge_album(db, loser, keeper)
             removed += 1
     if removed:
         db.commit()
