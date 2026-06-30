@@ -12,7 +12,7 @@
     </p>
     <ul>
       {% for c in pick.comments %}
-        <li>{% if c.rating %}{{ "★" * c.rating }}{% endif %} {{ c.content }}</li>
+        <li>{% if c.rating %}{{ "★" * c.rating }}{% endif %} {{ c.content }} — {{ pick.user.name or pick.user.slug[:6] }}</li>
       {% endfor %}
     </ul>
   </section>
