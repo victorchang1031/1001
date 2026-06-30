@@ -39,6 +39,10 @@ templates.env.globals["wiki_search_url"] = wikipedia_search_url
 COOKIE_MAX_AGE = 60 * 60 * 24 * 365 * 5
 
 
+def set_gid_cookie(resp, slug: str):
+    resp.set_cookie("gid", slug, max_age=COOKIE_MAX_AGE, httponly=True, samesite="lax")
+
+
 @app.middleware("http")
 async def ensure_uid(request: Request, call_next):
     # 身分用 cookie slug 認；?u=<slug> 換裝置/分享。群組情境用 ?g=<slug> + cookie gid。
@@ -52,7 +56,7 @@ async def ensure_uid(request: Request, call_next):
         response.set_cookie("uid", slug, max_age=COOKIE_MAX_AGE, httponly=True, samesite="lax")
     if incoming_g is not None:
         if incoming_g:
-            response.set_cookie("gid", incoming_g, max_age=COOKIE_MAX_AGE, httponly=True, samesite="lax")
+            set_gid_cookie(response, incoming_g)
         else:
             response.delete_cookie("gid")
     return response
@@ -306,7 +310,7 @@ def create_group(name: str = Form(...), db: Session = Depends(get_db), user: Use
     db.add(Membership(user_id=user.id, server_id=server.id))
     db.commit()
     resp = RedirectResponse("/", status_code=303)
-    resp.set_cookie("gid", server.slug, max_age=COOKIE_MAX_AGE, httponly=True, samesite="lax")
+    set_gid_cookie(resp, server.slug)
     return resp
 
 
@@ -325,7 +329,7 @@ def server_entry(slug: str, request: Request, db: Session = Depends(get_db), use
     member = db.query(Membership).filter_by(user_id=user.id, server_id=server.id).first()
     if member:
         resp = RedirectResponse("/", status_code=303)
-        resp.set_cookie("gid", server.slug, max_age=COOKIE_MAX_AGE, httponly=True, samesite="lax")
+        set_gid_cookie(resp, server.slug)
         return resp
     return templates.TemplateResponse(request, "join.html", {"server": server})
 
@@ -339,7 +343,7 @@ def join_server(slug: str, db: Session = Depends(get_db), user: User = Depends(g
         db.add(Membership(user_id=user.id, server_id=server.id))
         db.commit()
     resp = RedirectResponse("/", status_code=303)
-    resp.set_cookie("gid", server.slug, max_age=COOKIE_MAX_AGE, httponly=True, samesite="lax")
+    set_gid_cookie(resp, server.slug)
     return resp
 
 
