@@ -91,3 +91,32 @@ def test_group_context_cookie_set_and_cleared():
     r2 = c.get("/?g=")
     sc = r2.headers.get("set-cookie", "")
     assert 'gid=""' in sc or "gid=;" in sc or "Max-Age=0" in sc
+
+
+def test_create_group_then_member_sees_group_home():
+    c = _client()
+    r = c.post("/groups", data={"name": "Friends"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert "gid=" in r.headers.get("set-cookie", "")
+    page = c.get("/groups")
+    assert "Friends" in page.text
+
+
+def test_join_via_server_url():
+    with SessionLocal() as s:
+        s.add(Server(slug="open1", name="OpenGroup"))
+        s.commit()
+    c = _client()
+    page = c.get("/s/open1")
+    assert "OpenGroup" in page.text
+    r = c.post("/s/open1/join", follow_redirects=False)
+    assert r.status_code == 303
+    assert "gid=open1" in r.headers.get("set-cookie", "")
+
+
+def test_set_name():
+    c = _client()
+    c.get("/")
+    r = c.post("/me", data={"name": "Vic"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert "Vic" in c.get("/groups").text

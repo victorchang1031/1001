@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>群組</h1>
+<p><a href="/?g=">回到個人頁</a></p>
+
+<h2>我的群組</h2>
+<ul>
+  {% for s in servers %}
+    <li><a href="/?g={{ s.slug }}">{{ s.name }}</a>
+        — 邀請連結：<code>/s/{{ s.slug }}</code></li>
+  {% else %}
+    <li>還沒有群組。</li>
+  {% endfor %}
+</ul>
+
+<h2>建立群組</h2>
+<form method="post" action="/groups">
+  <input type="text" name="name" placeholder="群組名稱" required>
+  <button type="submit">建立</button>
+</form>
+
+<h2>暱稱</h2>
+<form method="post" action="/me">
+  <input type="text" name="name" placeholder="顯示名稱" value="{{ me.name or '' }}">
+  <button type="submit">儲存</button>
+</form>
+{% endblock %}

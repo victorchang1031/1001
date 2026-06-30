@@ -286,6 +286,63 @@ def album_detail(request: Request, album_id: int, db: Session = Depends(get_db),
     )
 
 
+@app.get("/groups")
+def groups(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    rows = (
+        db.query(Server)
+        .join(Membership, Membership.server_id == Server.id)
+        .filter(Membership.user_id == user.id)
+        .order_by(Server.created_at)
+        .all()
+    )
+    return templates.TemplateResponse(request, "groups.html", {"servers": rows, "me": user})
+
+
+@app.post("/groups")
+def create_group(name: str = Form(...), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    server = Server(slug=secrets.token_urlsafe(6), name=name)
+    db.add(server)
+    db.commit()
+    db.add(Membership(user_id=user.id, server_id=server.id))
+    db.commit()
+    resp = RedirectResponse("/", status_code=303)
+    resp.set_cookie("gid", server.slug, max_age=COOKIE_MAX_AGE, httponly=True, samesite="lax")
+    return resp
+
+
+@app.post("/me")
+def set_name(name: str = Form(""), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    user.name = name or None
+    db.commit()
+    return RedirectResponse("/groups", status_code=303)
+
+
+@app.get("/s/{slug}")
+def server_entry(slug: str, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    server = db.query(Server).filter(Server.slug == slug).first()
+    if server is None:
+        raise HTTPException(status_code=404, detail="group not found")
+    member = db.query(Membership).filter_by(user_id=user.id, server_id=server.id).first()
+    if member:
+        resp = RedirectResponse("/", status_code=303)
+        resp.set_cookie("gid", server.slug, max_age=COOKIE_MAX_AGE, httponly=True, samesite="lax")
+        return resp
+    return templates.TemplateResponse(request, "join.html", {"server": server})
+
+
+@app.post("/s/{slug}/join")
+def join_server(slug: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    server = db.query(Server).filter(Server.slug == slug).first()
+    if server is None:
+        raise HTTPException(status_code=404, detail="group not found")
+    if not db.query(Membership).filter_by(user_id=user.id, server_id=server.id).first():
+        db.add(Membership(user_id=user.id, server_id=server.id))
+        db.commit()
+    resp = RedirectResponse("/", status_code=303)
+    resp.set_cookie("gid", server.slug, max_age=COOKIE_MAX_AGE, httponly=True, samesite="lax")
+    return resp
+
+
 @app.get("/stats")
 def stats(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     mine = db.query(DailyPick).filter(DailyPick.user_id == user.id)
