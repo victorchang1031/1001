@@ -120,3 +120,42 @@ def test_set_name():
     r = c.post("/me", data={"name": "Vic"}, follow_redirects=False)
     assert r.status_code == 303
     assert "Vic" in c.get("/groups").text
+
+
+def test_history_scoped_to_group():
+    c = _client()
+    c.post("/groups", data={"name": "G"}, follow_redirects=False)
+    assert c.get("/history").status_code == 200
+    assert c.get("/draw").status_code == 200
+    assert c.get("/draw/history").status_code == 200
+    assert c.get("/albums", params={"status": "listened"}).status_code == 200
+    assert c.get("/stats").status_code == 200
+    home = c.get("/")
+    assert home.status_code == 200
+    assert "群組" in home.text
+    r2 = c.get("/?g=", follow_redirects=False)
+    assert r2.status_code in (200, 303)
+
+
+def test_personal_and_group_history_independent_at_data_layer():
+    with SessionLocal() as s:
+        s.add(Server(slug="hist-g", name="HistG"))
+        s.commit()
+    c = _client()
+    c.get("/draw")
+    r = c.post("/s/hist-g/join", follow_redirects=False)
+    assert r.status_code == 303
+    c.get("/draw")
+    with SessionLocal() as s:
+        from app.models import DrawHistory
+        personal_draws = (
+            s.query(DrawHistory).filter(DrawHistory.server_id.is_(None)).count()
+        )
+        group_draws = (
+            s.query(DrawHistory)
+            .join(Server, Server.id == DrawHistory.server_id)
+            .filter(Server.slug == "hist-g")
+            .count()
+        )
+        assert personal_draws >= 1
+        assert group_draws == 1

@@ -89,15 +89,21 @@ def get_current_server(
 
 
 @app.get("/")
-def home(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def home(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    server: Server | None = Depends(get_current_server),
+):
     now = datetime.datetime.now()
     today = now.date()
-    gate = daily.pending_gate_pick(db, user, today)
+    gate = daily.pending_gate_pick(db, user, today, server=server)
     pick = None
     if gate is None:
-        pick = daily.get_or_create_today_pick(db, user, today, now)
+        pick = daily.get_or_create_today_pick(db, user, today, now, server=server)
+    members = daily.server_members_today(db, server, today) if server else None
     return templates.TemplateResponse(
-        request, "index.html", {"gate": gate, "pick": pick}
+        request, "index.html", {"gate": gate, "pick": pick, "server": server, "members": members}
     )
 
 
@@ -176,10 +182,10 @@ def refetch_covers(key: str, db: Session = Depends(get_db)):
 
 
 @app.get("/history")
-def history(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def history(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user), server: Server | None = Depends(get_current_server)):
     picks = (
         db.query(DailyPick)
-        .filter(DailyPick.user_id == user.id)
+        .filter(DailyPick.user_id == user.id, daily.scope(DailyPick.server_id, server))
         .order_by(DailyPick.date.desc())
         .all()
     )
@@ -189,31 +195,31 @@ def history(request: Request, db: Session = Depends(get_db), user: User = Depend
 
 
 @app.get("/draw")
-def draw(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def draw(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user), server: Server | None = Depends(get_current_server)):
     album = db.query(Album).order_by(func.random()).first()
     ensure_spotify_url(db, album)
     if not album.wikipedia_url:
         album.wikipedia_url = wikipedia_url(album.title, album.artist)
-    db.add(DrawHistory(user_id=user.id, album_id=album.id, drawn_at=datetime.datetime.now()))
+    db.add(DrawHistory(user_id=user.id, server_id=server.id if server else None, album_id=album.id, drawn_at=datetime.datetime.now()))
     db.commit()
     keep_ids = (
         db.query(DrawHistory.id)
-        .filter(DrawHistory.user_id == user.id)
+        .filter(DrawHistory.user_id == user.id, daily.scope(DrawHistory.server_id, server))
         .order_by(DrawHistory.drawn_at.desc(), DrawHistory.id.desc())
         .limit(25)
     )
     db.query(DrawHistory).filter(
-        DrawHistory.user_id == user.id, DrawHistory.id.notin_(keep_ids)
+        DrawHistory.user_id == user.id, daily.scope(DrawHistory.server_id, server), DrawHistory.id.notin_(keep_ids)
     ).delete(synchronize_session=False)
     db.commit()
     return templates.TemplateResponse(request, "draw.html", {"album": album})
 
 
 @app.get("/draw/history")
-def draw_history(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def draw_history(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user), server: Server | None = Depends(get_current_server)):
     records = (
         db.query(DrawHistory)
-        .filter(DrawHistory.user_id == user.id)
+        .filter(DrawHistory.user_id == user.id, daily.scope(DrawHistory.server_id, server))
         .order_by(DrawHistory.drawn_at.desc())
         .all()
     )
@@ -230,6 +236,7 @@ def albums(
     q: str = "",
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
+    server: Server | None = Depends(get_current_server),
 ):
     query = db.query(Album)
     if decade:
@@ -246,7 +253,7 @@ def albums(
     result = query.order_by(Album.artist).all()
 
     if status:
-        picks = db.query(DailyPick).filter(DailyPick.user_id == user.id).all()
+        picks = db.query(DailyPick).filter(DailyPick.user_id == user.id, daily.scope(DailyPick.server_id, server)).all()
         listened_ids = {p.album_id for p in picks if p.status == "listened"}
         skipped_ids = {p.album_id for p in picks if p.status == "skipped"}
         seen_ids = {p.album_id for p in picks}
@@ -275,13 +282,13 @@ def albums(
 
 
 @app.get("/albums/{album_id}")
-def album_detail(request: Request, album_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def album_detail(request: Request, album_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user), server: Server | None = Depends(get_current_server)):
     album = db.get(Album, album_id)
     if album is None:
         raise HTTPException(status_code=404, detail="Album not found")
     picks = (
         db.query(DailyPick)
-        .filter(DailyPick.album_id == album_id, DailyPick.user_id == user.id)
+        .filter(DailyPick.album_id == album_id, DailyPick.user_id == user.id, daily.scope(DailyPick.server_id, server))
         .order_by(DailyPick.date.desc())
         .all()
     )
@@ -348,27 +355,28 @@ def join_server(slug: str, db: Session = Depends(get_db), user: User = Depends(g
 
 
 @app.get("/stats")
-def stats(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    mine = db.query(DailyPick).filter(DailyPick.user_id == user.id)
+def stats(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user), server: Server | None = Depends(get_current_server)):
+    sc = daily.scope(DailyPick.server_id, server)
+    mine = db.query(DailyPick).filter(DailyPick.user_id == user.id, sc)
     total_albums = db.query(Album).count()
     listened = mine.filter(DailyPick.status == "listened").count()
     skipped = mine.filter(DailyPick.status == "skipped").count()
     seen_album_ids = {
         row[0]
-        for row in db.query(DailyPick.album_id).filter(DailyPick.user_id == user.id).distinct()
+        for row in db.query(DailyPick.album_id).filter(DailyPick.user_id == user.id, sc).distinct()
     }
     unseen = total_albums - len(seen_album_ids)
     avg_rating = (
         db.query(func.avg(Comment.rating))
         .join(DailyPick, Comment.daily_pick_id == DailyPick.id)
-        .filter(DailyPick.user_id == user.id, Comment.rating.isnot(None))
+        .filter(DailyPick.user_id == user.id, sc, Comment.rating.isnot(None))
         .scalar()
     )
     top_albums = (
         db.query(Album, func.avg(Comment.rating).label("avg_rating"))
         .join(DailyPick, DailyPick.album_id == Album.id)
         .join(Comment, Comment.daily_pick_id == DailyPick.id)
-        .filter(DailyPick.user_id == user.id, Comment.rating.isnot(None))
+        .filter(DailyPick.user_id == user.id, sc, Comment.rating.isnot(None))
         .group_by(Album.id)
         .order_by(func.avg(Comment.rating).desc())
         .limit(5)

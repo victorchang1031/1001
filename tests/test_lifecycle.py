@@ -1,7 +1,7 @@
 import datetime
 import random
 from app.database import SessionLocal, init_db, engine, Base
-from app.models import User, Album, DailyPick
+from app.models import User, Album, DailyPick, Server, Membership
 from app import daily
 
 
@@ -43,3 +43,20 @@ def test_multi_day_cycle_never_repeats_listened_and_conserves_albums():
             assert len(listened_ids) == len(set(listened_ids))
             assert len(set(listened_ids)) <= total
             day += datetime.timedelta(days=1)
+
+
+def test_group_lifecycle_independent():
+    with SessionLocal() as s:
+        u = s.query(User).first()
+        srv = Server(slug="lc-g", name="LC")
+        s.add(srv)
+        s.commit()
+        s.add(Membership(user_id=u.id, server_id=srv.id))
+        s.commit()
+        now = datetime.datetime(2026, 6, 21, 8, 30)
+        today = now.date()
+        p = daily.get_or_create_today_pick(s, u, today, now, server=srv)
+        assert p.server_id == srv.id
+        personal = daily.get_or_create_today_pick(s, u, today, now)
+        assert personal.server_id is None
+        assert personal.id != p.id
