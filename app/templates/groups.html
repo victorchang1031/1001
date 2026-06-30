@@ -4,10 +4,11 @@
 <p><a href="/?g=">回到個人頁</a></p>
 
 <h2>我的群組</h2>
+<p>把邀請連結傳給朋友，對方點開後按「加入」就會看到你們共用的每日推薦與成員進度。</p>
 <ul>
   {% for s in servers %}
     <li><a href="/?g={{ s.slug }}">{{ s.name }}</a>
-        — 邀請連結：<code>/s/{{ s.slug }}</code></li>
+        — 邀請連結：<a href="{{ request.base_url }}s/{{ s.slug }}">{{ request.base_url }}s/{{ s.slug }}</a></li>
   {% else %}
     <li>還沒有群組。</li>
   {% endfor %}
