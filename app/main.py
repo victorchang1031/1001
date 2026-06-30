@@ -309,7 +309,13 @@ def groups(request: Request, db: Session = Depends(get_db), user: User = Depends
         .order_by(Server.created_at)
         .all()
     )
-    return templates.TemplateResponse(request, "groups.html", {"servers": rows, "me": user})
+    members_by_server = {
+        s.id: db.query(User).join(Membership, Membership.user_id == User.id).filter(Membership.server_id == s.id).all()
+        for s in rows
+    }
+    return templates.TemplateResponse(
+        request, "groups.html", {"servers": rows, "me": user, "members_by_server": members_by_server}
+    )
 
 
 @app.post("/groups")

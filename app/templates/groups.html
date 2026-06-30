@@ -8,7 +8,8 @@
 <ul>
   {% for s in servers %}
     <li><a href="/?g={{ s.slug }}">{{ s.name }}</a>
-        — 邀請連結：<a href="{{ request.base_url }}s/{{ s.slug }}">{{ request.base_url }}s/{{ s.slug }}</a></li>
+        — 邀請連結：<a href="{{ request.base_url }}s/{{ s.slug }}">{{ request.base_url }}s/{{ s.slug }}</a>
+        <br>成員：{% for u in members_by_server[s.id] %}{{ u.name or u.slug[:6] }}{% if not loop.last %}、{% endif %}{% endfor %}</li>
   {% else %}
     <li>還沒有群組。</li>
   {% endfor %}
