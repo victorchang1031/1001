@@ -1,6 +1,6 @@
 import re
 from collections import defaultdict
-from app.models import Album, QueueEntry, DailyPick, DrawHistory
+from app.models import Album, DailyPick, DrawHistory
 
 SAMPLE_ALBUMS = [
     {"title": "Kind of Blue", "artist": "Miles Davis", "year": 1959, "genre": "Jazz"},
@@ -1184,7 +1184,6 @@ MERGE_DUPLICATES_CROSS = [
 def _merge_album(db, loser: Album, keeper: Album) -> None:
     db.query(DailyPick).filter(DailyPick.album_id == loser.id).update({"album_id": keeper.id})
     db.query(DrawHistory).filter(DrawHistory.album_id == loser.id).update({"album_id": keeper.id})
-    db.query(QueueEntry).filter(QueueEntry.album_id == loser.id).delete()
     db.delete(loser)
 
 

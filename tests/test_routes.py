@@ -2,8 +2,6 @@ import datetime
 from fastapi.testclient import TestClient
 from app.database import init_db, engine, Base, SessionLocal
 from app.models import Album
-from app.queue_logic import initialize_queue
-from app import daily
 
 
 def setup_module(module):
@@ -13,7 +11,6 @@ def setup_module(module):
         s.add(Album(title="Kind of Blue", artist="Miles Davis", year=1959, genre="Jazz"))
         s.add(Album(title="Thriller", artist="Michael Jackson", year=1982, genre="Pop"))
         s.commit()
-        initialize_queue(s)
 
 
 def _client():

@@ -1,6 +1,6 @@
 import datetime
 from app.database import SessionLocal, init_db, engine, Base
-from app.models import Album, QueueEntry, DailyPick, Comment
+from app.models import User, Album, DailyPick, Comment
 
 
 def setup_function():
@@ -11,10 +11,11 @@ def setup_function():
 def test_create_album_and_relationships():
     with SessionLocal() as s:
         album = Album(title="Kind of Blue", artist="Miles Davis", year=1959, genre="Jazz")
-        s.add(album)
+        user = User(slug="u1")
+        s.add_all([album, user])
         s.flush()
-        s.add(QueueEntry(album_id=album.id, position=0))
         pick = DailyPick(
+            user_id=user.id,
             date=datetime.date(2026, 6, 21),
             album_id=album.id,
             status="pending",

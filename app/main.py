@@ -1,6 +1,6 @@
 import datetime
 import os
-import random
+import secrets
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Form, Depends, HTTPException
 from fastapi.responses import RedirectResponse
@@ -10,8 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import init_db, get_db, SessionLocal
-from app.models import Album, DailyPick, DrawHistory, Comment
-from app.queue_logic import initialize_queue
+from app.models import User, Album, DailyPick, DrawHistory, Comment
 from app.seed_data import seed_albums, dedup_albums
 from app.scheduler import start_scheduler
 from app.config import settings
@@ -26,7 +25,6 @@ async def lifespan(app: FastAPI):
     with SessionLocal() as db:
         seed_albums(db)
         dedup_albums(db)
-        initialize_queue(db)
     start_scheduler()
     start_cover_backfill()
     yield
@@ -38,15 +36,38 @@ templates = Jinja2Templates(directory="app/templates")
 templates.env.globals["css_version"] = lambda: int(os.path.getmtime("app/static/style.css"))
 templates.env.globals["wiki_search_url"] = wikipedia_search_url
 
+COOKIE_MAX_AGE = 60 * 60 * 24 * 365 * 5
+
+
+@app.middleware("http")
+async def ensure_uid(request: Request, call_next):
+    # 身分用 cookie slug 認；?u=<slug> 可帶入別的連結（換裝置/分享）。沒密碼。
+    incoming = request.query_params.get("u")
+    slug = incoming or request.cookies.get("uid") or secrets.token_urlsafe(9)
+    request.state.uid = slug
+    response = await call_next(request)
+    if incoming or not request.cookies.get("uid"):
+        response.set_cookie("uid", slug, max_age=COOKIE_MAX_AGE, httponly=True, samesite="lax")
+    return response
+
+
+def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
+    user = db.query(User).filter(User.slug == request.state.uid).first()
+    if user is None:
+        user = User(slug=request.state.uid)
+        db.add(user)
+        db.commit()
+    return user
+
 
 @app.get("/")
-def home(request: Request, db: Session = Depends(get_db)):
+def home(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     now = datetime.datetime.now()
     today = now.date()
-    gate = daily.pending_gate_pick(db, today)
+    gate = daily.pending_gate_pick(db, user, today)
     pick = None
     if gate is None:
-        pick = daily.get_or_create_today_pick(db, today, now)
+        pick = daily.get_or_create_today_pick(db, user, today, now)
     return templates.TemplateResponse(
         request, "index.html", {"gate": gate, "pick": pick}
     )
@@ -59,9 +80,10 @@ def gate(
     content: str = Form(""),
     rating: str = Form(""),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     pick = db.get(DailyPick, pick_id)
-    if pick:
+    if pick and pick.user_id == user.id:
         daily.answer_gate(db, pick, listened == "yes")
         if listened == "yes" and content:
             daily.add_comment(db, pick, content, int(rating) if rating else None)
@@ -74,9 +96,10 @@ def comment(
     content: str = Form(...),
     rating: str = Form(""),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     pick = db.get(DailyPick, pick_id)
-    if pick:
+    if pick and pick.user_id == user.id:
         daily.add_comment(db, pick, content, int(rating) if rating else None)
     return RedirectResponse("/", status_code=303)
 
@@ -125,30 +148,47 @@ def refetch_covers(key: str, db: Session = Depends(get_db)):
 
 
 @app.get("/history")
-def history(request: Request, db: Session = Depends(get_db)):
-    picks = db.query(DailyPick).order_by(DailyPick.date.desc()).all()
+def history(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    picks = (
+        db.query(DailyPick)
+        .filter(DailyPick.user_id == user.id)
+        .order_by(DailyPick.date.desc())
+        .all()
+    )
     return templates.TemplateResponse(
         request, "history.html", {"picks": picks}
     )
 
 
 @app.get("/draw")
-def draw(request: Request, db: Session = Depends(get_db)):
+def draw(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     album = db.query(Album).order_by(func.random()).first()
     ensure_spotify_url(db, album)
     if not album.wikipedia_url:
         album.wikipedia_url = wikipedia_url(album.title, album.artist)
-    db.add(DrawHistory(album_id=album.id, drawn_at=datetime.datetime.now()))
+    db.add(DrawHistory(user_id=user.id, album_id=album.id, drawn_at=datetime.datetime.now()))
     db.commit()
-    keep_ids = db.query(DrawHistory.id).order_by(DrawHistory.drawn_at.desc(), DrawHistory.id.desc()).limit(25)
-    db.query(DrawHistory).filter(DrawHistory.id.notin_(keep_ids)).delete(synchronize_session=False)
+    keep_ids = (
+        db.query(DrawHistory.id)
+        .filter(DrawHistory.user_id == user.id)
+        .order_by(DrawHistory.drawn_at.desc(), DrawHistory.id.desc())
+        .limit(25)
+    )
+    db.query(DrawHistory).filter(
+        DrawHistory.user_id == user.id, DrawHistory.id.notin_(keep_ids)
+    ).delete(synchronize_session=False)
     db.commit()
     return templates.TemplateResponse(request, "draw.html", {"album": album})
 
 
 @app.get("/draw/history")
-def draw_history(request: Request, db: Session = Depends(get_db)):
-    records = db.query(DrawHistory).order_by(DrawHistory.drawn_at.desc()).all()
+def draw_history(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    records = (
+        db.query(DrawHistory)
+        .filter(DrawHistory.user_id == user.id)
+        .order_by(DrawHistory.drawn_at.desc())
+        .all()
+    )
     return templates.TemplateResponse(request, "draw_history.html", {"records": records})
 
 
@@ -161,6 +201,7 @@ def albums(
     letter: str = "",
     q: str = "",
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     query = db.query(Album)
     if decade:
@@ -177,7 +218,7 @@ def albums(
     result = query.order_by(Album.artist).all()
 
     if status:
-        picks = db.query(DailyPick).all()
+        picks = db.query(DailyPick).filter(DailyPick.user_id == user.id).all()
         listened_ids = {p.album_id for p in picks if p.status == "listened"}
         skipped_ids = {p.album_id for p in picks if p.status == "skipped"}
         seen_ids = {p.album_id for p in picks}
@@ -206,13 +247,13 @@ def albums(
 
 
 @app.get("/albums/{album_id}")
-def album_detail(request: Request, album_id: int, db: Session = Depends(get_db)):
+def album_detail(request: Request, album_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     album = db.get(Album, album_id)
     if album is None:
         raise HTTPException(status_code=404, detail="Album not found")
     picks = (
         db.query(DailyPick)
-        .filter(DailyPick.album_id == album_id)
+        .filter(DailyPick.album_id == album_id, DailyPick.user_id == user.id)
         .order_by(DailyPick.date.desc())
         .all()
     )
@@ -222,18 +263,27 @@ def album_detail(request: Request, album_id: int, db: Session = Depends(get_db))
 
 
 @app.get("/stats")
-def stats(request: Request, db: Session = Depends(get_db)):
+def stats(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    mine = db.query(DailyPick).filter(DailyPick.user_id == user.id)
     total_albums = db.query(Album).count()
-    listened = db.query(DailyPick).filter(DailyPick.status == "listened").count()
-    skipped = db.query(DailyPick).filter(DailyPick.status == "skipped").count()
-    seen_album_ids = {row[0] for row in db.query(DailyPick.album_id).distinct()}
+    listened = mine.filter(DailyPick.status == "listened").count()
+    skipped = mine.filter(DailyPick.status == "skipped").count()
+    seen_album_ids = {
+        row[0]
+        for row in db.query(DailyPick.album_id).filter(DailyPick.user_id == user.id).distinct()
+    }
     unseen = total_albums - len(seen_album_ids)
-    avg_rating = db.query(func.avg(Comment.rating)).filter(Comment.rating.isnot(None)).scalar()
+    avg_rating = (
+        db.query(func.avg(Comment.rating))
+        .join(DailyPick, Comment.daily_pick_id == DailyPick.id)
+        .filter(DailyPick.user_id == user.id, Comment.rating.isnot(None))
+        .scalar()
+    )
     top_albums = (
         db.query(Album, func.avg(Comment.rating).label("avg_rating"))
         .join(DailyPick, DailyPick.album_id == Album.id)
         .join(Comment, Comment.daily_pick_id == DailyPick.id)
-        .filter(Comment.rating.isnot(None))
+        .filter(DailyPick.user_id == user.id, Comment.rating.isnot(None))
         .group_by(Album.id)
         .order_by(func.avg(Comment.rating).desc())
         .limit(5)

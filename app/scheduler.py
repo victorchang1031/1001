@@ -1,6 +1,7 @@
 import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from app.database import SessionLocal
+from app.models import User
 from app.daily import get_or_create_today_pick
 from app.config import settings
 
@@ -8,7 +9,8 @@ from app.config import settings
 def run_daily_job() -> None:
     now = datetime.datetime.now()
     with SessionLocal() as db:
-        get_or_create_today_pick(db, now.date(), now)
+        for user in db.query(User).all():
+            get_or_create_today_pick(db, user, now.date(), now)
 
 
 def start_scheduler() -> BackgroundScheduler:

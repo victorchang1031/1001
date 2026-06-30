@@ -1,7 +1,7 @@
 import datetime
 import threading
-from app.models import Album, DailyPick, Comment
-from app.queue_logic import pop_next, reinsert_random
+from sqlalchemy import func
+from app.models import User, Album, DailyPick, Comment
 from app.spotify import ensure_spotify_url
 from app.music_links import wikipedia_url
 from app.config import settings
@@ -34,36 +34,55 @@ def is_revealed(now: datetime.datetime) -> bool:
     return now.hour >= settings.reveal_hour
 
 
-def pending_gate_pick(db, today: datetime.date) -> DailyPick | None:
+def pending_gate_pick(db, user: User, today: datetime.date) -> DailyPick | None:
     return (
         db.query(DailyPick)
-        .filter(DailyPick.date < today, DailyPick.status == "pending")
+        .filter(
+            DailyPick.user_id == user.id,
+            DailyPick.date < today,
+            DailyPick.status == "pending",
+        )
         .order_by(DailyPick.date)
         .first()
     )
 
 
 def answer_gate(db, pick: DailyPick, listened: bool) -> None:
-    if listened:
-        pick.status = "listened"
-    else:
-        pick.status = "skipped"
-        reinsert_random(db, pick.album_id)
+    pick.status = "listened" if listened else "skipped"
     db.commit()
 
 
-def get_or_create_today_pick(db, today: datetime.date, now: datetime.datetime) -> DailyPick | None:
+def _pick_unseen_album(db, user: User) -> Album | None:
+    listened = (
+        db.query(DailyPick.album_id)
+        .filter(DailyPick.user_id == user.id, DailyPick.status == "listened")
+    )
+    return (
+        db.query(Album)
+        .filter(Album.id.notin_(listened))
+        .order_by(func.random())
+        .first()
+    )
+
+
+def get_or_create_today_pick(db, user: User, today: datetime.date, now: datetime.datetime) -> DailyPick | None:
     if not is_revealed(now):
         return None
-    existing = db.query(DailyPick).filter(DailyPick.date == today).first()
+    existing = (
+        db.query(DailyPick)
+        .filter(DailyPick.user_id == user.id, DailyPick.date == today)
+        .first()
+    )
     if existing:
         return existing
-    if pending_gate_pick(db, today) is not None:
+    if pending_gate_pick(db, user, today) is not None:
         return None
-    album = pop_next(db)
+    album = _pick_unseen_album(db, user)
     if album is None:
         return None
-    pick = DailyPick(date=today, album_id=album.id, status="pending", revealed_at=now)
+    pick = DailyPick(
+        user_id=user.id, date=today, album_id=album.id, status="pending", revealed_at=now
+    )
     db.add(pick)
     db.commit()
     _enrich_album_async(album.id)
