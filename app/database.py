@@ -39,7 +39,14 @@ def init_db():
         # ponytail: create_all 不會替既有表補欄位，缺才 ALTER；型別 SQLite/PG 通用
         if "user" in tables and "name" not in cols("user"):
             conn.execute(text('ALTER TABLE "user" ADD COLUMN name VARCHAR'))
+        if "daily_pick" in tables and "user_id" not in cols("daily_pick"):
+            conn.execute(text("ALTER TABLE daily_pick ADD COLUMN user_id INTEGER"))
+            if conn.dialect.name == "postgresql":
+                # 舊單人版的 date 單欄 UNIQUE 擋掉多 user 各自的當日 pick，換成 (user_id, date)
+                conn.execute(text("ALTER TABLE daily_pick DROP CONSTRAINT IF EXISTS daily_pick_date_key"))
         if "daily_pick" in tables and "server_id" not in cols("daily_pick"):
             conn.execute(text("ALTER TABLE daily_pick ADD COLUMN server_id INTEGER"))
+        if "draw_history" in tables and "user_id" not in cols("draw_history"):
+            conn.execute(text("ALTER TABLE draw_history ADD COLUMN user_id INTEGER"))
         if "draw_history" in tables and "server_id" not in cols("draw_history"):
             conn.execute(text("ALTER TABLE draw_history ADD COLUMN server_id INTEGER"))
