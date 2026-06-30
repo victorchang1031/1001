@@ -13,6 +13,19 @@
     </ul>
   </details>
   {% endif %}
+  {% if comments %}
+  <details>
+    <summary>群組留言</summary>
+    <ul>
+      {% for c in comments %}
+        <li>{{ c.daily_pick.user.name or c.daily_pick.user.slug[:6] }} ·
+          <a href="/albums/{{ c.daily_pick.album.id }}">{{ c.daily_pick.album.artist }} — {{ c.daily_pick.album.title }}</a>
+          — {% if c.rating %}{{ "★" * c.rating }}{% endif %} {{ c.content }}</li>
+      {% endfor %}
+    </ul>
+    <p><a href="/activity">查看全部</a></p>
+  </details>
+  {% endif %}
 {% endif %}
 {% if gate %}
   <h1>先回顧昨天</h1>

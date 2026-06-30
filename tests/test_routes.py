@@ -205,6 +205,18 @@ def test_activity_page_lists_group_members_comments():
     assert "commenter2" in r.text
 
 
+def test_home_page_shows_group_comments():
+    with SessionLocal() as s:
+        album_id = s.query(Album).filter_by(title="Kind of Blue").first().id
+    _seed_group_comment(album_id, "grp-home", "commenter4")
+    c = _client()
+    c.get("/?u=viewer4")
+    c.post("/s/grp-home/join", data={"name": "Viewer4"})
+    r = c.get("/")
+    assert "great album" in r.text
+    assert "commenter4" in r.text
+
+
 def test_activity_personal_mode_hides_other_users_comments():
     with SessionLocal() as s:
         album_id = s.query(Album).filter_by(title="Kind of Blue").first().id

@@ -102,8 +102,19 @@ def home(
     if gate is None:
         pick = daily.get_or_create_today_pick(db, user, today, now, server=server)
     members = daily.server_members_today(db, server, today) if server else None
+    comments = None
+    if server:
+        comments = (
+            db.query(Comment)
+            .join(DailyPick, Comment.daily_pick_id == DailyPick.id)
+            .filter(DailyPick.server_id == server.id)
+            .order_by(Comment.created_at.desc())
+            .limit(10)
+            .all()
+        )
     return templates.TemplateResponse(
-        request, "index.html", {"gate": gate, "pick": pick, "server": server, "members": members}
+        request, "index.html",
+        {"gate": gate, "pick": pick, "server": server, "members": members, "comments": comments},
     )
 
 
