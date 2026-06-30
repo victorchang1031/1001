@@ -1,7 +1,7 @@
 import datetime
 from fastapi.testclient import TestClient
 from app.database import init_db, engine, Base, SessionLocal
-from app.models import Album
+from app.models import Album, Server
 
 
 def setup_module(module):
@@ -79,3 +79,15 @@ def test_stats_page_returns_200():
     r = _client().get("/stats")
     assert r.status_code == 200
     assert "專輯總數" in r.text
+
+
+def test_group_context_cookie_set_and_cleared():
+    with SessionLocal() as s:
+        s.add(Server(slug="gx", name="GX"))
+        s.commit()
+    c = _client()
+    r = c.get("/?g=gx")
+    assert r.cookies.get("gid") == "gx" or "gid=gx" in r.headers.get("set-cookie", "")
+    r2 = c.get("/?g=")
+    sc = r2.headers.get("set-cookie", "")
+    assert 'gid=""' in sc or "gid=;" in sc or "Max-Age=0" in sc

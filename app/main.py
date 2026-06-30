@@ -10,7 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import init_db, get_db, SessionLocal
-from app.models import User, Album, DailyPick, DrawHistory, Comment
+from app.models import User, Server, Membership, Album, DailyPick, DrawHistory, Comment
 from app.seed_data import seed_albums, dedup_albums
 from app.scheduler import start_scheduler
 from app.config import settings
@@ -41,13 +41,20 @@ COOKIE_MAX_AGE = 60 * 60 * 24 * 365 * 5
 
 @app.middleware("http")
 async def ensure_uid(request: Request, call_next):
-    # 身分用 cookie slug 認；?u=<slug> 可帶入別的連結（換裝置/分享）。沒密碼。
+    # 身分用 cookie slug 認；?u=<slug> 換裝置/分享。群組情境用 ?g=<slug> + cookie gid。
     incoming = request.query_params.get("u")
     slug = incoming or request.cookies.get("uid") or secrets.token_urlsafe(9)
     request.state.uid = slug
+    incoming_g = request.query_params.get("g")
+    request.state.gid = incoming_g if incoming_g is not None else (request.cookies.get("gid") or "")
     response = await call_next(request)
     if incoming or not request.cookies.get("uid"):
         response.set_cookie("uid", slug, max_age=COOKIE_MAX_AGE, httponly=True, samesite="lax")
+    if incoming_g is not None:
+        if incoming_g:
+            response.set_cookie("gid", incoming_g, max_age=COOKIE_MAX_AGE, httponly=True, samesite="lax")
+        else:
+            response.delete_cookie("gid")
     return response
 
 
@@ -58,6 +65,23 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
         db.add(user)
         db.commit()
     return user
+
+
+def get_current_server(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Server | None:
+    gid = request.state.gid
+    if not gid:
+        return None
+    server = db.query(Server).filter(Server.slug == gid).first()
+    if server is None:
+        return None
+    is_member = (
+        db.query(Membership).filter_by(user_id=user.id, server_id=server.id).first()
+    )
+    return server if is_member else None
 
 
 @app.get("/")
