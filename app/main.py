@@ -116,6 +116,8 @@ def gate(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    # ponytail: 只驗 ownership，不檢查目前群組情境——pick 自帶 server_id，
+    # 改它本人的 pick 不需要也不該管現在切在哪個群
     pick = db.get(DailyPick, pick_id)
     if pick and pick.user_id == user.id:
         daily.answer_gate(db, pick, listened == "yes")
@@ -132,6 +134,7 @@ def comment(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    # ponytail: 同 /gate，只驗 ownership；pick 自帶 server_id
     pick = db.get(DailyPick, pick_id)
     if pick and pick.user_id == user.id:
         daily.add_comment(db, pick, content, int(rating) if rating else None)
