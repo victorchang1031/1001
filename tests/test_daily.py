@@ -155,16 +155,29 @@ def test_server_members_today_lists_each_member_pick():
         assert by_slug["b"] is None
 
 
-def test_group_members_share_same_album_but_personal_unaffected():
+def test_group_members_get_independent_picks_and_progress():
     with SessionLocal() as s:
         u1 = _user(s, "a"); u2 = _user(s, "b")
         srv = _server(s)
         now = datetime.datetime(2026, 6, 21, 8, 30)
         p1 = daily.get_or_create_today_pick(s, u1, now.date(), now, server=srv)
         p2 = daily.get_or_create_today_pick(s, u2, now.date(), now, server=srv)
-        assert p1.album_id == p2.album_id
         assert p1.id != p2.id
+
+        # u1 標自己的 pick 聽過，不會讓那張專輯從 u2 的待抽池消失
+        daily.answer_gate(s, p1, listened=True)
+        total_albums = s.query(Album).count()
+        u2_listened = db_listened_ids(s, u2, srv)
+        unseen_for_u2 = s.query(Album).filter(Album.id.notin_(u2_listened)).count()
+        assert unseen_for_u2 == total_albums
 
         personal1 = daily.get_or_create_today_pick(s, u1, now.date(), now)
         personal2 = daily.get_or_create_today_pick(s, u2, now.date(), now)
         assert personal1.server_id is None and personal2.server_id is None
+
+
+def db_listened_ids(s, user, server):
+    return (
+        s.query(DailyPick.album_id)
+        .filter(DailyPick.user_id == user.id, DailyPick.server_id == server.id, DailyPick.status == "listened")
+    )
