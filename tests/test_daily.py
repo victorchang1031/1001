@@ -102,3 +102,54 @@ def test_add_comment():
         c = daily.add_comment(s, p1, "nice", 4)
         assert c.rating == 4
         assert p1.comments[0].content == "nice"
+
+
+from app.models import Server, Membership
+
+
+def _server(s, slug="g1"):
+    srv = Server(slug=slug, name=slug)
+    s.add(srv); s.commit()
+    return srv
+
+
+def test_personal_and_group_picks_are_independent():
+    with SessionLocal() as s:
+        u = _user(s)
+        srv = _server(s)
+        now = datetime.datetime(2026, 6, 21, 8, 30)
+        personal = daily.get_or_create_today_pick(s, u, now.date(), now)
+        group = daily.get_or_create_today_pick(s, u, now.date(), now, server=srv)
+        assert personal is not None and group is not None
+        assert personal.id != group.id
+        assert personal.server_id is None
+        assert group.server_id == srv.id
+
+
+def test_group_gate_independent_from_personal():
+    with SessionLocal() as s:
+        u = _user(s)
+        srv = _server(s)
+        day1 = datetime.datetime(2026, 6, 21, 8, 30)
+        daily.get_or_create_today_pick(s, u, day1.date(), day1, server=srv)
+        day2 = datetime.datetime(2026, 6, 22, 8, 30)
+        # 群組有未結清 gate，但個人情境不受影響
+        assert daily.pending_gate_pick(s, u, day2.date(), server=srv) is not None
+        assert daily.pending_gate_pick(s, u, day2.date()) is None
+        assert daily.get_or_create_today_pick(s, u, day2.date(), day2) is not None
+
+
+def test_server_members_today_lists_each_member_pick():
+    with SessionLocal() as s:
+        u1 = _user(s, "a"); u2 = _user(s, "b")
+        srv = _server(s)
+        s.add_all([Membership(user_id=u1.id, server_id=srv.id),
+                   Membership(user_id=u2.id, server_id=srv.id)])
+        s.commit()
+        now = datetime.datetime(2026, 6, 21, 8, 30)
+        daily.get_or_create_today_pick(s, u1, now.date(), now, server=srv)
+        rows = daily.server_members_today(s, srv, now.date())
+        by_slug = {u.slug: pick for u, pick in rows}
+        assert set(by_slug) == {"a", "b"}
+        assert by_slug["a"] is not None
+        assert by_slug["b"] is None

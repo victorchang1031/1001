@@ -1,10 +1,14 @@
 import datetime
 import threading
 from sqlalchemy import func
-from app.models import User, Album, DailyPick, Comment
+from app.models import User, Album, DailyPick, Comment, Membership
 from app.spotify import ensure_spotify_url
 from app.music_links import wikipedia_url
 from app.config import settings
+
+
+def scope(col, server):
+    return col == server.id if server else col.is_(None)
 
 
 def enrich_album(db, album: Album) -> None:
@@ -34,11 +38,12 @@ def is_revealed(now: datetime.datetime) -> bool:
     return now.hour >= settings.reveal_hour
 
 
-def pending_gate_pick(db, user: User, today: datetime.date) -> DailyPick | None:
+def pending_gate_pick(db, user: User, today: datetime.date, server=None) -> DailyPick | None:
     return (
         db.query(DailyPick)
         .filter(
             DailyPick.user_id == user.id,
+            scope(DailyPick.server_id, server),
             DailyPick.date < today,
             DailyPick.status == "pending",
         )
@@ -52,10 +57,14 @@ def answer_gate(db, pick: DailyPick, listened: bool) -> None:
     db.commit()
 
 
-def _pick_unseen_album(db, user: User) -> Album | None:
+def _pick_unseen_album(db, user: User, server=None) -> Album | None:
     listened = (
         db.query(DailyPick.album_id)
-        .filter(DailyPick.user_id == user.id, DailyPick.status == "listened")
+        .filter(
+            DailyPick.user_id == user.id,
+            scope(DailyPick.server_id, server),
+            DailyPick.status == "listened",
+        )
     )
     return (
         db.query(Album)
@@ -65,28 +74,46 @@ def _pick_unseen_album(db, user: User) -> Album | None:
     )
 
 
-def get_or_create_today_pick(db, user: User, today: datetime.date, now: datetime.datetime) -> DailyPick | None:
+def get_or_create_today_pick(db, user: User, today: datetime.date, now: datetime.datetime, server=None) -> DailyPick | None:
     if not is_revealed(now):
         return None
     existing = (
         db.query(DailyPick)
-        .filter(DailyPick.user_id == user.id, DailyPick.date == today)
+        .filter(DailyPick.user_id == user.id, scope(DailyPick.server_id, server), DailyPick.date == today)
         .first()
     )
     if existing:
         return existing
-    if pending_gate_pick(db, user, today) is not None:
+    if pending_gate_pick(db, user, today, server) is not None:
         return None
-    album = _pick_unseen_album(db, user)
+    album = _pick_unseen_album(db, user, server)
     if album is None:
         return None
     pick = DailyPick(
-        user_id=user.id, date=today, album_id=album.id, status="pending", revealed_at=now
+        user_id=user.id,
+        server_id=server.id if server else None,
+        date=today,
+        album_id=album.id,
+        status="pending",
+        revealed_at=now,
     )
     db.add(pick)
     db.commit()
     _enrich_album_async(album.id)
     return pick
+
+
+def server_members_today(db, server, today: datetime.date):
+    out = []
+    for m in db.query(Membership).filter_by(server_id=server.id).all():
+        u = db.get(User, m.user_id)
+        pick = (
+            db.query(DailyPick)
+            .filter_by(user_id=u.id, server_id=server.id, date=today)
+            .first()
+        )
+        out.append((u, pick))
+    return out
 
 
 def add_comment(db, pick: DailyPick, content: str, rating: int | None) -> Comment:
