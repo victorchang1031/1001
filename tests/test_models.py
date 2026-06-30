@@ -31,3 +31,26 @@ def test_create_album_and_relationships():
         assert loaded.album.title == "Kind of Blue"
         assert loaded.comments[0].rating == 5
         assert loaded.status == "pending"
+
+
+def test_server_and_membership_and_scoped_columns():
+    from app.database import SessionLocal, init_db, engine, Base
+    from app.models import User, Server, Membership, DailyPick
+    Base.metadata.drop_all(bind=engine)
+    init_db()
+    with SessionLocal() as s:
+        u = User(slug="u1", name="Vic")
+        srv = Server(slug="g1", name="Group One")
+        s.add_all([u, srv]); s.commit()
+        s.add(Membership(user_id=u.id, server_id=srv.id)); s.commit()
+        import datetime
+        p = DailyPick(user_id=u.id, server_id=srv.id, date=datetime.date(2026, 6, 30),
+                      album_id=1, status="pending", revealed_at=datetime.datetime.now())
+        s.add(p); s.commit()
+        assert p.server_id == srv.id
+        assert u.name == "Vic"
+        # 個人情境：server_id 可為 None
+        p2 = DailyPick(user_id=u.id, server_id=None, date=datetime.date(2026, 6, 29),
+                       album_id=1, status="pending", revealed_at=datetime.datetime.now())
+        s.add(p2); s.commit()
+        assert p2.server_id is None

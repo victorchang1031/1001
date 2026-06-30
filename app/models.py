@@ -8,6 +8,7 @@ class User(Base):
     __tablename__ = "user"
     id: Mapped[int] = mapped_column(primary_key=True)
     slug: Mapped[str] = mapped_column(String, unique=True, index=True)
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=datetime.datetime.now
     )
@@ -25,11 +26,32 @@ class Album(Base):
     cover_image_url: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
-class DailyPick(Base):
-    __tablename__ = "daily_pick"
-    __table_args__ = (UniqueConstraint("user_id", "date"),)
+class Server(Base):
+    __tablename__ = "server"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    slug: Mapped[str] = mapped_column(String, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, default=datetime.datetime.now
+    )
+
+
+class Membership(Base):
+    __tablename__ = "membership"
+    __table_args__ = (UniqueConstraint("user_id", "server_id"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
+    server_id: Mapped[int] = mapped_column(ForeignKey("server.id"))
+    joined_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, default=datetime.datetime.now
+    )
+
+
+class DailyPick(Base):
+    __tablename__ = "daily_pick"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
+    server_id: Mapped[int | None] = mapped_column(ForeignKey("server.id"), nullable=True)
     date: Mapped[datetime.date] = mapped_column(Date)
     album_id: Mapped[int] = mapped_column(ForeignKey("album.id"))
     status: Mapped[str] = mapped_column(String, default="pending")
@@ -44,6 +66,7 @@ class DrawHistory(Base):
     __tablename__ = "draw_history"
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
+    server_id: Mapped[int | None] = mapped_column(ForeignKey("server.id"), nullable=True)
     album_id: Mapped[int] = mapped_column(ForeignKey("album.id"))
     drawn_at: Mapped[datetime.datetime] = mapped_column(DateTime)
     album: Mapped["Album"] = relationship()
