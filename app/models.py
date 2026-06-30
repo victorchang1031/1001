@@ -57,6 +57,7 @@ class DailyPick(Base):
     status: Mapped[str] = mapped_column(String, default="pending")
     revealed_at: Mapped[datetime.datetime] = mapped_column(DateTime)
     album: Mapped["Album"] = relationship()
+    user: Mapped["User"] = relationship()
     comments: Mapped[list["Comment"]] = relationship(
         back_populates="daily_pick", cascade="all, delete-orphan"
     )

@@ -1,7 +1,7 @@
 import datetime
 from fastapi.testclient import TestClient
 from app.database import init_db, engine, Base, SessionLocal
-from app.models import Album, Server
+from app.models import Album, Server, User, Membership, DailyPick, Comment
 
 
 def setup_module(module):
@@ -159,3 +159,57 @@ def test_personal_and_group_history_independent_at_data_layer():
         )
         assert personal_draws >= 1
         assert group_draws == 1
+
+
+def _seed_group_comment(album_id, server_slug, commenter_slug):
+    with SessionLocal() as s:
+        srv = Server(slug=server_slug, name=server_slug)
+        commenter = User(slug=commenter_slug, name=commenter_slug)
+        s.add_all([srv, commenter])
+        s.commit()
+        s.add(Membership(user_id=commenter.id, server_id=srv.id))
+        pick = DailyPick(
+            user_id=commenter.id, server_id=srv.id,
+            date=datetime.date(2026, 6, 21), album_id=album_id,
+            status="listened", revealed_at=datetime.datetime(2026, 6, 21, 8, 30),
+        )
+        s.add(pick)
+        s.commit()
+        s.add(Comment(daily_pick_id=pick.id, content="great album", rating=5,
+                       created_at=datetime.datetime(2026, 6, 21, 9, 0)))
+        s.commit()
+
+
+def test_album_detail_shows_other_group_members_comments():
+    with SessionLocal() as s:
+        album_id = s.query(Album).filter_by(title="Kind of Blue").first().id
+    _seed_group_comment(album_id, "grp-album", "commenter1")
+    c = _client()
+    c.get("/?u=viewer1")
+    c.post("/s/grp-album/join", data={"name": "Viewer1"})
+    r = c.get(f"/albums/{album_id}")
+    assert "great album" in r.text
+    assert "commenter1" in r.text
+
+
+def test_activity_page_lists_group_members_comments():
+    with SessionLocal() as s:
+        album_id = s.query(Album).filter_by(title="Kind of Blue").first().id
+    _seed_group_comment(album_id, "grp-activity", "commenter2")
+    c = _client()
+    c.get("/?u=viewer2")
+    c.post("/s/grp-activity/join", data={"name": "Viewer2"})
+    r = c.get("/activity")
+    assert r.status_code == 200
+    assert "great album" in r.text
+    assert "commenter2" in r.text
+
+
+def test_activity_personal_mode_hides_other_users_comments():
+    with SessionLocal() as s:
+        album_id = s.query(Album).filter_by(title="Kind of Blue").first().id
+    _seed_group_comment(album_id, "grp-private", "commenter3")
+    c = _client()
+    c.get("/?u=viewer3")
+    r = c.get("/activity")
+    assert "great album" not in r.text

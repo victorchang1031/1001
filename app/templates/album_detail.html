@@ -14,7 +14,7 @@
 <h3>評論紀錄</h3>
 {% for pick in picks %}
   <section>
-    <p>{{ pick.date }} ·
+    <p>{{ pick.date }}{% if server %} · {{ pick.user.name or pick.user.slug[:6] }}{% endif %} ·
       {% if pick.status == "listened" %}已收聽
       {% elif pick.status == "skipped" %}尚未收聽
       {% else %}待回答{% endif %}

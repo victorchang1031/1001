@@ -289,15 +289,26 @@ def album_detail(request: Request, album_id: int, db: Session = Depends(get_db),
     album = db.get(Album, album_id)
     if album is None:
         raise HTTPException(status_code=404, detail="Album not found")
-    picks = (
-        db.query(DailyPick)
-        .filter(DailyPick.album_id == album_id, DailyPick.user_id == user.id, daily.scope(DailyPick.server_id, server))
-        .order_by(DailyPick.date.desc())
-        .all()
-    )
+    query = db.query(DailyPick).filter(DailyPick.album_id == album_id)
+    if server:
+        query = query.filter(DailyPick.server_id == server.id)
+    else:
+        query = query.filter(DailyPick.user_id == user.id, DailyPick.server_id.is_(None))
+    picks = query.order_by(DailyPick.date.desc()).all()
     return templates.TemplateResponse(
-        request, "album_detail.html", {"album": album, "picks": picks}
+        request, "album_detail.html", {"album": album, "picks": picks, "server": server}
     )
+
+
+@app.get("/activity")
+def activity(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user), server: Server | None = Depends(get_current_server)):
+    query = db.query(Comment).join(DailyPick, Comment.daily_pick_id == DailyPick.id)
+    if server:
+        query = query.filter(DailyPick.server_id == server.id)
+    else:
+        query = query.filter(DailyPick.user_id == user.id, DailyPick.server_id.is_(None))
+    comments = query.order_by(Comment.created_at.desc()).limit(50).all()
+    return templates.TemplateResponse(request, "activity.html", {"comments": comments, "server": server})
 
 
 @app.get("/groups")

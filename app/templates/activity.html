@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>動態</h1>
+{% for c in comments %}
+  <section>
+    <p>{% if server %}{{ c.daily_pick.user.name or c.daily_pick.user.slug[:6] }} · {% endif %}{{ c.daily_pick.date }} ·
+      <a href="/albums/{{ c.daily_pick.album.id }}">{{ c.daily_pick.album.artist }} — {{ c.daily_pick.album.title }}</a></p>
+    <p>{% if c.rating %}{{ "★" * c.rating }}{% endif %} {{ c.content }}</p>
+  </section>
+{% else %}
+  <p>還沒有留言。</p>
+{% endfor %}
+{% endblock %}
