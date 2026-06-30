@@ -8,7 +8,7 @@
     <ul>
       {% for u, p in members %}
         <li>{{ u.name or u.slug[:6] }} —
-          {% if p %}{{ p.album.artist }} · {{ p.status }}{% else %}尚未抽{% endif %}</li>
+          {% if p %}{{ p.album.artist }} — {{ p.album.title }} · {{ p.status }}{% else %}尚未抽{% endif %}</li>
       {% endfor %}
     </ul>
   </details>
