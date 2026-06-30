@@ -58,20 +58,27 @@ def answer_gate(db, pick: DailyPick, listened: bool) -> None:
 
 
 def _pick_unseen_album(db, user: User, server=None) -> Album | None:
-    listened = (
-        db.query(DailyPick.album_id)
-        .filter(
-            DailyPick.user_id == user.id,
-            scope(DailyPick.server_id, server),
-            DailyPick.status == "listened",
-        )
-    )
+    # 群組情境下「聽過」算整組共同進度，不分誰聽的；個人情境維持只看自己
+    listened = db.query(DailyPick.album_id).filter(DailyPick.status == "listened")
+    if server:
+        listened = listened.filter(DailyPick.server_id == server.id)
+    else:
+        listened = listened.filter(DailyPick.user_id == user.id, DailyPick.server_id.is_(None))
     return (
         db.query(Album)
         .filter(Album.id.notin_(listened))
         .order_by(func.random())
         .first()
     )
+
+
+def _group_album_id_for_today(db, server, today: datetime.date) -> int | None:
+    pick = (
+        db.query(DailyPick)
+        .filter(DailyPick.server_id == server.id, DailyPick.date == today)
+        .first()
+    )
+    return pick.album_id if pick else None
 
 
 def get_or_create_today_pick(db, user: User, today: datetime.date, now: datetime.datetime, server=None) -> DailyPick | None:
@@ -86,7 +93,14 @@ def get_or_create_today_pick(db, user: User, today: datetime.date, now: datetime
         return existing
     if pending_gate_pick(db, user, today, server) is not None:
         return None
-    album = _pick_unseen_album(db, user, server)
+    # 群組已有人今天先抽過，就跟著用同一張；否則才重新抽（同組當天共用同張專輯）
+    album = None
+    if server:
+        group_album_id = _group_album_id_for_today(db, server, today)
+        if group_album_id is not None:
+            album = db.get(Album, group_album_id)
+    if album is None:
+        album = _pick_unseen_album(db, user, server)
     if album is None:
         return None
     pick = DailyPick(

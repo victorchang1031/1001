@@ -153,3 +153,18 @@ def test_server_members_today_lists_each_member_pick():
         assert set(by_slug) == {"a", "b"}
         assert by_slug["a"] is not None
         assert by_slug["b"] is None
+
+
+def test_group_members_share_same_album_but_personal_unaffected():
+    with SessionLocal() as s:
+        u1 = _user(s, "a"); u2 = _user(s, "b")
+        srv = _server(s)
+        now = datetime.datetime(2026, 6, 21, 8, 30)
+        p1 = daily.get_or_create_today_pick(s, u1, now.date(), now, server=srv)
+        p2 = daily.get_or_create_today_pick(s, u2, now.date(), now, server=srv)
+        assert p1.album_id == p2.album_id
+        assert p1.id != p2.id
+
+        personal1 = daily.get_or_create_today_pick(s, u1, now.date(), now)
+        personal2 = daily.get_or_create_today_pick(s, u2, now.date(), now)
+        assert personal1.server_id is None and personal2.server_id is None

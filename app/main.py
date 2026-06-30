@@ -310,7 +310,11 @@ def groups(request: Request, db: Session = Depends(get_db), user: User = Depends
         .all()
     )
     members_by_server = {
-        s.id: db.query(User).join(Membership, Membership.user_id == User.id).filter(Membership.server_id == s.id).all()
+        s.id: db.query(User)
+        .join(Membership, Membership.user_id == User.id)
+        .filter(Membership.server_id == s.id)
+        .order_by(Membership.joined_at)
+        .all()
         for s in rows
     }
     return templates.TemplateResponse(
