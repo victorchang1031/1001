@@ -2,6 +2,7 @@
 {% block content %}
 <h1>加入「{{ server.name }}」？</h1>
 <form method="post" action="/s/{{ server.slug }}/join">
+  <input type="text" name="name" placeholder="你的暱稱" required>
   <button type="submit">加入</button>
 </form>
 <p><a href="/">取消</a></p>

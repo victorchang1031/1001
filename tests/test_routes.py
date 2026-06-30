@@ -109,7 +109,7 @@ def test_join_via_server_url():
     c = _client()
     page = c.get("/s/open1")
     assert "OpenGroup" in page.text
-    r = c.post("/s/open1/join", follow_redirects=False)
+    r = c.post("/s/open1/join", data={"name": "Vic"}, follow_redirects=False)
     assert r.status_code == 303
     assert "gid=open1" in r.headers.get("set-cookie", "")
 
@@ -143,7 +143,7 @@ def test_personal_and_group_history_independent_at_data_layer():
         s.commit()
     c = _client()
     c.get("/draw")
-    r = c.post("/s/hist-g/join", follow_redirects=False)
+    r = c.post("/s/hist-g/join", data={"name": "Vic"}, follow_redirects=False)
     assert r.status_code == 303
     c.get("/draw")
     with SessionLocal() as s:

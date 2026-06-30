@@ -355,13 +355,14 @@ def server_entry(slug: str, request: Request, db: Session = Depends(get_db), use
 
 
 @app.post("/s/{slug}/join")
-def join_server(slug: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def join_server(slug: str, name: str = Form(...), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     server = db.query(Server).filter(Server.slug == slug).first()
     if server is None:
         raise HTTPException(status_code=404, detail="group not found")
+    user.name = name
     if not db.query(Membership).filter_by(user_id=user.id, server_id=server.id).first():
         db.add(Membership(user_id=user.id, server_id=server.id))
-        db.commit()
+    db.commit()
     resp = RedirectResponse("/", status_code=303)
     set_gid_cookie(resp, server.slug)
     return resp
